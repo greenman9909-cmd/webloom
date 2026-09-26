@@ -361,7 +361,29 @@ def run_job(job_id):
     writer = JobLog(job_id)
 
     try:
+        progressively_uploaded = set()
+        storage_prefix = f"projects/{job.get('user_id')}/{job_id}"
+
         def on_scraper_progress(progress):
+            rel = progress.get("path")
+            if rel and progress.get("event") in {"root_saved", "asset_saved"} and supabase_ready():
+                file_path = output_dir / rel
+                if file_path.is_file():
+                    try:
+                        mime = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+                        storage_upload_file(
+                            f"{storage_prefix}/frontend/{rel}",
+                            file_path,
+                            mime,
+                            token=job.get("auth_token"),
+                        )
+                        progressively_uploaded.add(rel)
+                        progress["published"] = True
+                        if rel == "index.html":
+                            progress["preview_ready"] = True
+                    except Exception as exc:
+                        progress["publish_error"] = str(exc)[:180]
+
             with _jobs_lock:
                 current = _jobs.get(job_id)
                 if current:
@@ -456,6 +478,8 @@ def run_job(job_id):
                     if not file_path.is_file():
                         continue
                     rel = file_path.relative_to(output_dir).as_posix()
+                    if rel in progressively_uploaded:
+                        continue
                     mime = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
                     storage_upload_file(f"{storage_prefix}/frontend/{rel}", file_path, mime, token=job.get("auth_token"))
                 storage_upload_file(
@@ -1571,7 +1595,7 @@ def _preview_project_context(job_id):
             pass
 
     if project:
-        if project.get("status") != "done":
+        if project.get("status") not in {"running", "done"}:
             abort(404)
     elif job:
         if job.get("status") != "done":
