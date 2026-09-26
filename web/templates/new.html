@@ -16,6 +16,14 @@
   <div class="capture-progress-bar"><i id="captureProgressBar"></i></div>
   <div class="capture-progress-copy"><b id="captureProgressTitle">Connecting to the site…</b><span id="captureProgressMeta">Checking the public entry page.</span></div>
 </div></section>
+<section class="card live-capture-result" id="liveCaptureResult" hidden>
+  <div class="live-capture-head">
+    <div><span class="badge">Live preview</span><h2 id="liveCaptureTitle">Captured site</h2><p id="liveCaptureMeta">Your capture is ready inside WebLoom.</p></div>
+    <div class="project-actions"><a class="btn" id="liveProjectLink" href="#">Project details</a><a class="btn primary" id="liveDownloadLink" href="#">Download ZIP ↓</a></div>
+  </div>
+  <div class="preview-toolbar"><span id="livePreviewStatus">Sandboxed reconstructed frontend</span><button class="btn" id="reloadLivePreview" type="button">Reload</button></div>
+  <iframe id="liveCaptureFrame" class="project-preview-frame" title="Live WebLoom capture preview" sandbox="allow-scripts allow-forms allow-popups allow-downloads" referrerpolicy="no-referrer"></iframe>
+</section>
 <section class="card visual-grid reveal motion-surface" data-scrub style="margin-top:18px">
 <div class="visual-copy"><span class="badge">What happens next</span><h2 style="margin-top:12px">The capture builds itself in front of you.</h2><p>WebLoom maps reachable pages, pulls referenced frontend files into one workspace, then gives you a live preview before export.</p><div class="mini-points"><div class="mini-point"><span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="18" cy="17" r="2"/><path d="M8 11 16 8M8 13l8 3"/></svg></span><span>Map internal links and reachable routes.</span></div><div class="mini-point"><span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 8h17M8 13s1.7-2 4-2 4 2 4 2-1.7 2-4 2-4-2-4-2Z"/><circle cx="12" cy="13" r="1"/></svg></span><span>Open the rebuilt frontend in a live preview.</span></div><div class="mini-point"><span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 7h14v12H5zM8 4h8v3"/><path d="M12 10v5M9.5 12.5 12 15l2.5-2.5"/></svg></span><span>Export the organized project when it looks right.</span></div></div></div>
 <div class="stage-card" data-depth="1.15"><div class="stage-toolbar"><span class="stage-dots"><i></i><i></i><i></i></span><span class="stage-url">public-site.example</span><span class="stage-status">Mapping</span></div><div class="stage-body"><div class="stage-browser"><div class="stage-browser-bar"></div><div class="stage-browser-page"></div></div><div class="stage-file-panel"><div class="stage-file"><i></i>pages /</div><div class="stage-file"><i></i>assets /</div><div class="stage-file"><i></i>metadata.json</div><div class="stage-file"><i></i>sitemap.xml</div></div><div class="stage-scan"></div><span class="stage-node a"></span><span class="stage-node b"></span><span class="stage-node c"></span><span class="stage-line a"></span><span class="stage-line b"></span><span class="stage-float one">Routes found</span><span class="stage-float two">Preview building</span></div></div>
@@ -76,11 +84,55 @@
         err.upgradeRequired = !!data?.upgrade_required;
         throw err;
       }
-      if (progressBar) progressBar.style.width = "100%";
-      if (progressTitle) progressTitle.textContent = data.job.status === "done" ? "Project ready." : "Capture started.";
-      if (progressMeta) progressMeta.textContent = "Opening your workspace…";
+      const showInlinePreview = job => {
+        const result = document.getElementById("liveCaptureResult");
+        const frame = document.getElementById("liveCaptureFrame");
+        const title = document.getElementById("liveCaptureTitle");
+        const meta = document.getElementById("liveCaptureMeta");
+        const projectLink = document.getElementById("liveProjectLink");
+        const downloadLink = document.getElementById("liveDownloadLink");
+        let host = job.url || value;
+        try { host = new URL(job.url || (value.startsWith("http") ? value : "https://" + value)).hostname; } catch {}
+        if (title) title.textContent = host;
+        if (meta) meta.textContent = (job.files || 0) + " files · " + ((job.bytes || 0) / 1048576).toFixed(1) + " MB · " + (job.failed || 0) + " skipped";
+        if (projectLink) projectLink.href = "/project/" + job.id;
+        if (downloadLink) downloadLink.href = job.download_url || ("/api/jobs/" + encodeURIComponent(job.id) + "/download");
+        if (frame) frame.src = (job.preview_url || ("/preview/" + encodeURIComponent(job.id) + "/")) + "?embedded=1";
+        if (result) {
+          result.hidden = false;
+          result.scrollIntoView({behavior:"smooth",block:"start"});
+        }
+        document.getElementById("reloadLivePreview")?.addEventListener("click", () => {
+          if (frame) frame.src = "/preview/" + encodeURIComponent(job.id) + "/?r=" + Date.now();
+        }, {once:true});
+      };
+
+      const waitForCapture = async job => {
+        let current = job;
+        for (let attempt = 0; attempt < 160; attempt++) {
+          if (current.status === "done") return current;
+          if (current.status === "error") throw new Error(current.error || "Capture failed.");
+          if (progressTitle) progressTitle.textContent = current.status === "running" ? "Capturing the site…" : "Capture queued…";
+          if (progressMeta) progressMeta.textContent = "The preview will appear here automatically.";
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          const statusResponse = await fetch("/api/jobs/" + encodeURIComponent(current.id), {credentials:"same-origin",headers:{"Accept":"application/json"}});
+          const statusRaw = await statusResponse.text();
+          let statusData = {};
+          try { statusData = JSON.parse(statusRaw || "{}"); } catch {}
+          if (!statusResponse.ok || !statusData.job) throw new Error(statusData.error || "Could not read capture status.");
+          current = statusData.job;
+        }
+        throw new Error("Capture is taking longer than expected. It is saved in Projects.");
+      };
+
       clearInterval(timer);
-      setTimeout(() => { location.href = "/project/" + data.job.id; }, 260);
+      const finishedJob = await waitForCapture(data.job);
+      if (progressBar) progressBar.style.width = "100%";
+      if (progressTitle) progressTitle.textContent = "Project ready.";
+      if (progressMeta) progressMeta.textContent = "Live preview loaded below — no redirect.";
+      showInlinePreview(finishedJob);
+      button.disabled = false;
+      button.textContent = "Capture another site";
     } catch (error) {
       clearInterval(timer);
       button.disabled = false;

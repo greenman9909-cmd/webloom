@@ -6,13 +6,14 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import shutil
 import socket
 import threading
 import time
 import uuid
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 from html.parser import HTMLParser
 from xml.sax.saxutils import escape as xml_escape
 
@@ -21,6 +22,7 @@ from flask import Flask, abort, jsonify, render_template, request, send_file, se
 
 from spa_ripper.path_utils import query_variant_relpath
 from spa_ripper.scraper import DEFAULT_USER_AGENT, SpaScraper
+from fusion_client import fusion_ready, fusion_request
 from webloom_integrations import (
     auth_signup,
     auth_signin,
@@ -44,6 +46,10 @@ from webloom_integrations import (
     auth_recover,
     update_user_profile,
     claim_owner,
+    create_api_key,
+    list_api_keys,
+    revoke_api_key,
+    identity_from_api_key,
 )
 
 
@@ -357,6 +363,49 @@ def run_job(job_id):
 
         _write_project_reports(output_dir, job, scraper)
 
+        fusion_state = {"configured": fusion_ready(), "status": "not_configured"}
+        if fusion_ready():
+            try:
+                fusion_payload = fusion_request(
+                    "/v1/fusion",
+                    {
+                        "url": job["url"],
+                        "limit": 50 if job.get("deep_assets") else 15,
+                        "max_depth": 2 if job.get("deep_assets") else 1,
+                        "timeout": 20,
+                    },
+                    timeout=240,
+                )
+                manifest = fusion_payload.get("manifest") or {}
+                (output_dir / "fusion.json").write_text(
+                    json.dumps(manifest, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+                allowed_artifacts = {
+                    "dataset.jsonl",
+                    "knowledge_base.md",
+                    "graph.json",
+                    "audit.json",
+                }
+                for name, body in (fusion_payload.get("artifacts") or {}).items():
+                    if name not in allowed_artifacts or not isinstance(body, str):
+                        continue
+                    (output_dir / name).write_text(body, encoding="utf-8")
+                fusion_state = {
+                    "configured": True,
+                    "status": "done",
+                    "pages": (manifest.get("stats") or {}).get("pages_fused", 0),
+                    "words": (manifest.get("stats") or {}).get("total_words", 0),
+                    "graph_edges": (manifest.get("stats") or {}).get("total_graph_edges", 0),
+                }
+            except Exception as exc:
+                writer.write(f"\n[!] Fusion analysis unavailable: {exc}\n")
+                fusion_state = {
+                    "configured": True,
+                    "status": "error",
+                    "error": str(exc)[:240],
+                }
+
         archive_base = JOB_ROOT / job_id / "webloom-project"
         archive_path = archive_base.with_suffix(".zip")
         shutil.make_archive(str(archive_base), "zip", root_dir=str(output_dir))
@@ -400,6 +449,7 @@ def run_job(job_id):
                     "capture_mode": "deep" if job.get("deep_assets") else "standard",
                     "max_files": job.get("max_files"),
                     "max_bytes": job.get("max_bytes"),
+                    "fusion": fusion_state,
                 },
                 finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             )
@@ -481,6 +531,24 @@ def settings_page():
     return render_template("settings.html")
 
 
+@app.get("/api-keys")
+def api_keys_page():
+    ident = current_identity()
+    if not ident:
+        return redirect("/signin?next=/api-keys")
+    if ident.get("is_anonymous") or not ident.get("email"):
+        return redirect("/signup?next=/api-keys")
+    return render_template("api_keys.html")
+
+
+@app.get("/docs")
+@app.get("/docs/api")
+@app.get("/docs/mcp")
+def docs_page():
+    section = "mcp" if request.path.endswith("/mcp") else ("api" if request.path.endswith("/api") else "start")
+    return render_template("docs.html", section=section)
+
+
 @app.get("/admin")
 def admin_page():
     ident = current_identity()
@@ -536,6 +604,7 @@ def health():
         "service": "WebLoom",
         "supabase": supabase_ready(),
         "stripe": bool(STRIPE_SECRET_KEY and STRIPE_PRO_PRICE_ID),
+        "fusion": fusion_ready(),
     })
 
 
@@ -651,6 +720,139 @@ def api_project(project_id):
     if not project:
         abort(404)
     return jsonify({"project": project})
+
+
+@app.get("/api/api-keys")
+@require_user
+def api_key_list():
+    if request.webloom_user.get("is_anonymous"):
+        return jsonify({"ok": False, "error": "Create a permanent account to use API keys."}), 409
+    token = request.cookies.get("wl_access") or session.get("access_token")
+    return jsonify({"ok": True, "keys": list_api_keys(request.webloom_user["id"], token=token)})
+
+
+@app.post("/api/api-keys")
+@require_user
+def api_key_create():
+    if request.webloom_user.get("is_anonymous") or not request.webloom_user.get("email"):
+        return jsonify({"ok": False, "error": "Create a permanent account to use API keys."}), 409
+    payload = request.get_json(silent=True) or {}
+    name = (payload.get("name") or "Default key").strip()[:80]
+    try:
+        raw_key, row = create_api_key(request.webloom_user["id"], name=name)
+    except RuntimeError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
+    return jsonify({
+        "ok": True,
+        "key": raw_key,
+        "record": {
+            "id": row.get("id"),
+            "name": row.get("name"),
+            "key_prefix": row.get("key_prefix"),
+            "created_at": row.get("created_at"),
+        },
+        "warning": "Copy this key now. WebLoom does not store the raw key.",
+    }), 201
+
+
+@app.delete("/api/api-keys/<key_id>")
+@require_user
+def api_key_revoke(key_id):
+    token = request.cookies.get("wl_access") or session.get("access_token")
+    try:
+        revoke_api_key(request.webloom_user["id"], key_id, token=token)
+    except RuntimeError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True})
+
+
+def _public_api_identity():
+    authorization = request.headers.get("Authorization", "")
+    if authorization.lower().startswith("bearer "):
+        raw_key = authorization.split(" ", 1)[1].strip()
+        ident = identity_from_api_key(raw_key)
+        if ident:
+            return ident
+    return current_identity()
+
+
+def _public_api_limits(identity, operation, payload):
+    owner = identity.get("role") == "owner"
+    pro = identity.get("plan") == "pro" and identity.get("subscription_status") in {"active", "trialing"}
+    if operation in {"crawl", "extract", "fusion"} and not (owner or pro):
+        return None, (jsonify({
+            "ok": False,
+            "error": "This API operation requires WebLoom Pro.",
+            "upgrade_required": True,
+        }), 403)
+
+    safe_payload = dict(payload or {})
+    if operation == "scrape":
+        safe_payload["limit"] = 1
+        safe_payload["max_depth"] = 0
+    elif operation == "map":
+        safe_payload["limit"] = min(int(safe_payload.get("limit") or 100), 5000 if owner else (1000 if pro else 100))
+    else:
+        requested = int(safe_payload.get("limit") or safe_payload.get("max_pages") or 25)
+        safe_payload["limit"] = min(requested, 250 if owner else 100)
+        safe_payload["max_depth"] = min(int(safe_payload.get("max_depth") or 2), 4 if owner else 3)
+    return safe_payload, None
+
+
+@app.post("/v1/<operation>")
+def public_fusion_api(operation):
+    if operation not in {"scrape", "map", "crawl", "extract", "fusion"}:
+        abort(404)
+    identity = _public_api_identity()
+    if not identity:
+        return jsonify({
+            "ok": False,
+            "error": "Authenticate with Authorization: Bearer wl_... or a signed-in WebLoom session.",
+        }), 401
+    if identity.get("is_anonymous"):
+        return jsonify({"ok": False, "error": "API access requires a permanent WebLoom account."}), 401
+    if not fusion_ready():
+        return jsonify({"ok": False, "error": "Fusion service is not configured."}), 503
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        safe_payload, denial = _public_api_limits(identity, operation, payload)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid numeric API option."}), 400
+    if denial:
+        return denial
+    try:
+        result = fusion_request(f"/v1/{operation}", safe_payload, timeout=240)
+    except RuntimeError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 502
+    return jsonify(result)
+
+
+@app.get("/v1/openapi.json")
+def public_openapi():
+    base = PUBLIC_APP_URL or request.host_url.rstrip("/")
+    return jsonify({
+        "openapi": "3.1.0",
+        "info": {
+            "title": "WebLoom API",
+            "version": "1.0.0",
+            "description": "Public-web scrape, map, crawl, extract and Fusion endpoints.",
+        },
+        "servers": [{"url": base}],
+        "components": {
+            "securitySchemes": {
+                "bearerAuth": {"type": "http", "scheme": "bearer"}
+            }
+        },
+        "security": [{"bearerAuth": []}],
+        "paths": {
+            "/v1/scrape": {"post": {"summary": "Scrape one public page into Markdown and metadata"}},
+            "/v1/map": {"post": {"summary": "Discover public URLs on a site"}},
+            "/v1/crawl": {"post": {"summary": "Crawl a public site into page records"}},
+            "/v1/extract": {"post": {"summary": "Extract named structured fields"}},
+            "/v1/fusion": {"post": {"summary": "Run the full WebLoom Fusion pipeline"}},
+        },
+    })
 
 
 @app.post("/api/billing/checkout")
@@ -966,20 +1168,232 @@ def job_download(job_id):
     )
 
 
-def _serve_preview_file(job_id, asset_path, remember=False):
+
+_PREVIEW_ASSET_EXTENSIONS = (
+    "js|mjs|cjs|css|json|woff2?|ttf|eot|png|jpe?g|webp|avif|gif|svg|ico|"
+    "mp4|webm|mov|m3u8|mp3|ogg|wav|m4a|vtt|srt|webmanifest"
+)
+
+
+def _preview_rewrite_html(data: bytes, job_id: str) -> bytes:
+    text = data.decode("utf-8", errors="replace")
+    prefix = f"/preview/{job_id}/"
+    proxy_prefix = prefix + "__origin/"
+
+    # Captured pages may carry a base/CSP that points back to the source site.
+    text = re.sub(r"(?is)<base\b[^>]*>", "", text)
+    text = re.sub(
+        r'(?is)<meta\b[^>]+http-equiv=["\']content-security-policy["\'][^>]*>',
+        "",
+        text,
+    )
+
+    def attr_repl(match):
+        return f'{match.group(1)}={match.group(2)}{prefix}{match.group(3)}'
+
+    text = re.sub(
+        r'(?i)\b(src|href|poster)\s*=\s*(["\'])/(?!/)([^"\']*)',
+        attr_repl,
+        text,
+    )
+
+    def srcset_repl(match):
+        quote = match.group(1)
+        raw = match.group(2)
+        parts = []
+        for item in raw.split(","):
+            bits = item.strip().split()
+            if bits and bits[0].startswith("/") and not bits[0].startswith("//"):
+                bits[0] = prefix + bits[0].lstrip("/")
+            parts.append(" ".join(bits))
+        return f"srcset={quote}{', '.join(parts)}{quote}"
+
+    text = re.sub(
+        r'(?i)srcset\s*=\s*(["\'])([^"\']*)\1',
+        srcset_repl,
+        text,
+    )
+    text = re.sub(
+        r'(?i)url\(\s*(["\']?)/(?!/)',
+        lambda m: f"url({m.group(1)}{prefix}",
+        text,
+    )
+
+    bridge = f"""<base href="{prefix}">
+<script>
+(() => {{
+  const previewRoot = {json.dumps(prefix)};
+  const proxyRoot = {json.dumps(proxy_prefix)};
+  const remap = value => {{
+    if (typeof value !== "string") return value;
+    if (value.startsWith("/") && !value.startsWith("//") && !value.startsWith(previewRoot)) {{
+      return proxyRoot + value.replace(/^\\/+/, "");
+    }}
+    return value;
+  }};
+  const nativeFetch = window.fetch;
+  if (nativeFetch) {{
+    window.fetch = function(input, init) {{
+      if (typeof input === "string") input = remap(input);
+      return nativeFetch.call(this, input, init);
+    }};
+  }}
+  const nativeOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(method, url, ...rest) {{
+    return nativeOpen.call(this, method, remap(url), ...rest);
+  }};
+}})();
+</script>"""
+    if re.search(r"(?i)<head[^>]*>", text):
+        text = re.sub(r"(?i)(<head[^>]*>)", lambda m: m.group(1) + bridge, text, count=1)
+    else:
+        text = bridge + text
+    return text.encode("utf-8")
+
+
+def _preview_rewrite_css(data: bytes, job_id: str) -> bytes:
+    text = data.decode("utf-8", errors="replace")
+    prefix = f"/preview/{job_id}/"
+    text = re.sub(
+        r'(?i)url\(\s*(["\']?)/(?!/)',
+        lambda m: f"url({m.group(1)}{prefix}",
+        text,
+    )
+    text = re.sub(
+        r'(?i)(@import\s+["\'])/(?!/)',
+        lambda m: m.group(1) + prefix,
+        text,
+    )
+    return text.encode("utf-8")
+
+
+def _preview_rewrite_js(data: bytes, job_id: str) -> bytes:
+    # Rewrite only obvious root-relative static asset strings. Runtime API calls
+    # are handled by the preview bridge and its read-only origin proxy.
+    text = data.decode("utf-8", errors="replace")
+    prefix = f"/preview/{job_id}/"
+    pattern = re.compile(
+        rf'(["\'\x60])/(?!/)([^"\'\x60\r\n]{{1,500}}\.(?:{_PREVIEW_ASSET_EXTENSIONS})(?:\?[^"\'\x60\r\n]*)?)\1',
+        re.I,
+    )
+    text = pattern.sub(lambda m: f"{m.group(1)}{prefix}{m.group(2)}{m.group(1)}", text)
+    return text.encode("utf-8")
+
+
+def _preview_response(data: bytes, content_type: str, job_id: str):
+    content_type = (content_type or "application/octet-stream").split(";", 1)[0].strip().lower()
+    if len(data) <= 12 * 1024 * 1024:
+        if content_type in {"text/html", "application/xhtml+xml"}:
+            data = _preview_rewrite_html(data, job_id)
+        elif content_type == "text/css":
+            data = _preview_rewrite_css(data, job_id)
+        elif content_type in {
+            "application/javascript",
+            "text/javascript",
+            "application/x-javascript",
+            "text/ecmascript",
+            "application/ecmascript",
+        }:
+            data = _preview_rewrite_js(data, job_id)
+
+    response = app.response_class(data, mimetype=content_type)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+def _preview_project_context(job_id):
     ident = current_identity()
     if not ident:
         abort(401)
-
     project = get_project(ident["id"], job_id) if supabase_ready() else None
     with _jobs_lock:
         job = _jobs.get(job_id)
-
     if project:
         if project.get("status") != "done":
             abort(404)
     elif not job or job.get("user_id") != ident["id"] or job.get("status") != "done":
         abort(404)
+    return ident, project, job
+
+
+@app.route("/preview/<job_id>/__origin/<path:asset_path>", methods=["GET", "HEAD"])
+def preview_origin_proxy(job_id, asset_path):
+    _, project, job = _preview_project_context(job_id)
+    source_url = (project or {}).get("source_url") or (job or {}).get("url")
+    if not source_url:
+        abort(404)
+    parsed_source = urlparse(source_url)
+    origin = f"{parsed_source.scheme}://{parsed_source.netloc}"
+    target = urljoin(origin + "/", asset_path)
+    parsed_target = urlparse(target)
+    if (parsed_target.hostname or "").lower() != (parsed_source.hostname or "").lower():
+        abort(403)
+    query = request.query_string.decode("utf-8", errors="ignore")
+    if query:
+        target += ("&" if "?" in target else "?") + query
+    try:
+        _validate_public_url(target)
+        safe_session = GuardedSession()
+        safe_session.headers.update({
+            "User-Agent": DEFAULT_USER_AGENT,
+            "Accept": request.headers.get("Accept", "*/*"),
+        })
+        upstream = safe_session.request(
+            request.method,
+            target,
+            timeout=15,
+            allow_redirects=False,
+            stream=True,
+        )
+    except Exception:
+        abort(502)
+
+    if 300 <= upstream.status_code < 400:
+        location = upstream.headers.get("Location")
+        if not location:
+            abort(404)
+        redirected = urljoin(target, location)
+        if (urlparse(redirected).hostname or "").lower() != (parsed_source.hostname or "").lower():
+            abort(403)
+        try:
+            _validate_public_url(redirected)
+            upstream = safe_session.request(
+                request.method,
+                redirected,
+                timeout=15,
+                allow_redirects=False,
+                stream=True,
+            )
+        except Exception:
+            abort(502)
+
+    if upstream.status_code >= 400:
+        return app.response_class(status=upstream.status_code)
+
+    size_header = upstream.headers.get("Content-Length")
+    if size_header:
+        try:
+            if int(size_header) > 12 * 1024 * 1024:
+                abort(413)
+        except ValueError:
+            pass
+
+    if request.method == "HEAD":
+        return app.response_class(status=upstream.status_code)
+
+    data = upstream.raw.read(12 * 1024 * 1024 + 1, decode_content=True)
+    if len(data) > 12 * 1024 * 1024:
+        abort(413)
+    return _preview_response(
+        data,
+        upstream.headers.get("Content-Type") or "application/octet-stream",
+        job_id,
+    )
+
+
+def _serve_preview_file(job_id, asset_path, remember=False):
+    ident, project, job = _preview_project_context(job_id)
 
     request_rel = asset_path or "index.html"
     query = request.query_string.decode("utf-8", errors="ignore")
@@ -1009,13 +1423,12 @@ def _serve_preview_file(job_id, asset_path, remember=False):
             stored = storage_download(f"{prefix}/frontend/{rel}")
             if stored:
                 data, content_type = stored
-                response = app.response_class(data, mimetype=content_type)
-                return finish(response)
+                return finish(_preview_response(data, content_type, job_id))
         if "." not in Path(request_rel).name:
             stored = storage_download(f"{prefix}/frontend/index.html")
             if stored:
                 data, content_type = stored
-                return finish(app.response_class(data, mimetype=content_type))
+                return finish(_preview_response(data, content_type, job_id))
         abort(404)
 
     root = (JOB_ROOT / job_id / "frontend").resolve()
@@ -1024,10 +1437,14 @@ def _serve_preview_file(job_id, asset_path, remember=False):
         if target != root and root not in target.parents:
             abort(404)
         if target.is_file():
-            return finish(send_from_directory(root, rel))
+            data = target.read_bytes()
+            content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+            return finish(_preview_response(data, content_type, job_id))
 
     if "." not in Path(request_rel).name:
-        return finish(send_from_directory(root, "index.html"))
+        index_file = root / "index.html"
+        if index_file.is_file():
+            return finish(_preview_response(index_file.read_bytes(), "text/html", job_id))
 
     abort(404)
 

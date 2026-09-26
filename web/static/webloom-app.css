@@ -202,3 +202,23 @@ background-size:24px 24px,24px 24px,auto}
 .capture-error[hidden]{display:none}
 .capture-error a{font-weight:800;color:#4b63db;white-space:nowrap}
 .notice.error{background:#fff7f8;color:#a33f50;border-color:#efd7dc}
+
+
+/* Functional live capture + Fusion workspace */
+.live-capture-result{margin-top:18px;padding:0;overflow:hidden}
+.live-capture-result[hidden]{display:none}
+.live-capture-head{display:flex;align-items:flex-start;justify-content:space-between;gap:22px;padding:20px 22px;border-bottom:1px solid var(--line);background:#fff}
+.live-capture-head h2{margin:11px 0 6px;font-size:23px;letter-spacing:-.04em}
+.live-capture-head p{margin:0;color:var(--muted);font-size:12px}
+.preview-toolbar{min-height:48px;padding:8px 12px 8px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #e7ebf3;background:#fbfcff;color:#64718a;font-size:11px;font-weight:700}
+.preview-toolbar .btn{padding:7px 10px;font-size:10px}
+.live-capture-result .project-preview-frame{min-height:640px}
+.project-nav{max-height:calc(100vh - 128px);overflow:auto;scrollbar-width:thin}
+.markdown-panel{max-height:680px;white-space:pre-wrap}
+.graph-edge{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:760px){
+  .live-capture-head{flex-direction:column}
+  .live-capture-head .project-actions{width:100%}
+  .live-capture-result .project-preview-frame{min-height:480px}
+  .project-nav{max-height:none}
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.greenman9909-cmd/webloom",
+  "title": "WebLoom",
+  "description": "Public-web scraping, mapping, crawling, structured extraction and Fusion data.",
+  "version": "1.0.0",
+  "repository": {
+    "url": "https://github.com/greenman9909-cmd/webloom",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@webloom/mcp-server",
+      "version": "1.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "WEBLOOM_API_URL",
+          "description": "Your deployed WebLoom base URL",
+          "isRequired": true,
+          "format": "string"
+        },
+        {
+          "name": "WEBLOOM_API_KEY",
+          "description": "WebLoom API key",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

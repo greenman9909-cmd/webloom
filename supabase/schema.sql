@@ -55,8 +55,22 @@ create table if not exists public.usage_events (
   created_at timestamptz not null default now()
 );
 
+
+create table if not exists public.api_keys (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null default 'Default key',
+  key_prefix text not null,
+  key_hash text not null unique,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz,
+  revoked_at timestamptz
+);
+
 create index if not exists projects_user_created_idx on public.projects(user_id, created_at desc);
 create index if not exists usage_user_created_idx on public.usage_events(user_id, created_at desc);
+create index if not exists api_keys_user_created_idx on public.api_keys(user_id, created_at desc);
+create index if not exists api_keys_hash_idx on public.api_keys(key_hash);
 create index if not exists free_trial_claims_user_idx on public.free_trial_claims(user_id);
 create index if not exists free_trial_claims_network_idx on public.free_trial_claims(network_key, claimed_at desc);
 
@@ -64,6 +78,7 @@ alter table public.profiles enable row level security;
 alter table public.projects enable row level security;
 alter table public.free_trial_claims enable row level security;
 alter table public.usage_events enable row level security;
+alter table public.api_keys enable row level security;
 
 drop policy if exists "profiles select own" on public.profiles;
 create policy "profiles select own" on public.profiles
@@ -106,6 +121,18 @@ drop policy if exists "usage select own" on public.usage_events;
 create policy "usage select own" on public.usage_events
 for select to authenticated
 using ((select auth.uid()) = user_id);
+
+
+drop policy if exists "api keys select own" on public.api_keys;
+create policy "api keys select own" on public.api_keys
+for select to authenticated
+using ((select auth.uid()) = user_id);
+
+drop policy if exists "api keys update own" on public.api_keys;
+create policy "api keys update own" on public.api_keys
+for update to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);
 
 create or replace function public.handle_new_user()
 returns trigger

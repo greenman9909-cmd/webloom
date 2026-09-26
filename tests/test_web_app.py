@@ -66,5 +66,32 @@ class WebAppTests(unittest.TestCase):
         self.assertTrue(response.get_json()["ok"])
 
 
+    def test_docs_routes_render(self):
+        for path in ("/docs", "/docs/api", "/docs/mcp"):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(b"WebLoom", response.data)
+
+    def test_public_api_requires_authentication(self):
+        response = self.client.post("/v1/scrape", json={"url": "https://example.com"})
+        self.assertEqual(response.status_code, 401)
+        self.assertFalse(response.get_json()["ok"])
+
+    def test_preview_html_rewrites_root_assets_into_project_scope(self):
+        rendered = web_app._preview_rewrite_html(
+            b'<html><head></head><body><img src="/assets/a.png"><script>fetch("/api/data")</script></body></html>',
+            "job-123",
+        ).decode("utf-8")
+        self.assertIn('/preview/job-123/assets/a.png', rendered)
+        self.assertIn('/preview/job-123/__origin/', rendered)
+        self.assertIn('<base href="/preview/job-123/">', rendered)
+
+    def test_new_capture_uses_inline_preview_instead_of_forced_redirect(self):
+        response = self.client.get("/new")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'id="liveCaptureFrame"', response.data)
+        self.assertNotIn(b'location.href = "/project/" + data.job.id', response.data)
+
+
 if __name__ == "__main__":
     unittest.main()
