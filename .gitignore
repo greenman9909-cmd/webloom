@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.dist-info/
+*.egg-info/
+build/
+dist/
+.venv/
+env/
+frontend/
+ani.pm_frontend/
+*.log
+.DS_Store
+web_jobs/
+.env
+.env.*
+!.env.example
