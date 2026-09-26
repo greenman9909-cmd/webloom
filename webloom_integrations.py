@@ -503,41 +503,57 @@ def set_subscription_state(user_id, customer_id, subscription_id, status):
 
 def storage_upload_bytes(object_path, data, content_type="application/octet-stream", token=None):
     token = token or _session_token()
-    if not token:
-        raise RuntimeError("No storage session is available.")
+    headers = _service_headers(content_type) or (_sb_headers(token, content_type) if token else None)
+    if not headers:
+        return None
     clean = object_path.lstrip("/")
-    r = requests.post(
-        f"{SUPABASE_URL}/storage/v1/object/{STORAGE_BUCKET}/{clean}",
-        headers={
-            **_sb_headers(token, content_type),
-            "x-upsert": "true",
-        },
-        data=data,
-        timeout=60,
-    )
-    if not r.ok:
-        raise RuntimeError(f"Storage upload failed: {r.text[:180]}")
-    return clean
+    try:
+        r = requests.post(
+            f"{SUPABASE_URL}/storage/v1/object/{STORAGE_BUCKET}/{clean}",
+            headers={
+                **headers,
+                "x-upsert": "true",
+            },
+            data=data,
+            timeout=30,
+        )
+        if not r.ok:
+            return None
+        return clean
+    except Exception:
+        return None
 
 
 def storage_upload_file(object_path, file_path, content_type="application/octet-stream", token=None):
-    with open(file_path, "rb") as fh:
-        return storage_upload_bytes(object_path, fh.read(), content_type, token)
+    try:
+        with open(file_path, "rb") as fh:
+            return storage_upload_bytes(object_path, fh.read(), content_type, token)
+    except Exception:
+        return None
 
 
 def storage_download(object_path, token=None):
     token = token or _session_token()
-    if not token:
-        return None
+    headers = _service_headers() or (_sb_headers(token) if token else _sb_headers())
     clean = object_path.lstrip("/")
-    r = requests.get(
-        f"{SUPABASE_URL}/storage/v1/object/authenticated/{STORAGE_BUCKET}/{clean}",
-        headers=_sb_headers(token),
-        timeout=60,
-    )
-    if not r.ok:
+    try:
+        r = requests.get(
+            f"{SUPABASE_URL}/storage/v1/object/authenticated/{STORAGE_BUCKET}/{clean}",
+            headers=headers,
+            timeout=30,
+        )
+        if not r.ok:
+            r_pub = requests.get(
+                f"{SUPABASE_URL}/storage/v1/object/public/{STORAGE_BUCKET}/{clean}",
+                headers=headers,
+                timeout=30,
+            )
+            if not r_pub.ok:
+                return None
+            r = r_pub
+        return r.content, r.headers.get("content-type") or "application/octet-stream"
+    except Exception:
         return None
-    return r.content, r.headers.get("content-type") or "application/octet-stream"
 
 
 def claim_owner(code, token=None):
