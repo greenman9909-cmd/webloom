@@ -93,5 +93,60 @@ class WebAppTests(unittest.TestCase):
         self.assertNotIn(b'location.href = "/project/" + data.job.id', response.data)
 
 
+    def test_new_capture_uses_real_streaming_capture_endpoint(self):
+        response = self.client.get("/new")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'"/api/clone/start"', response.data)
+        self.assertIn(b'text/event-stream', response.data)
+        self.assertIn(b'No fake timer', response.data)
+        self.assertNotIn(b'setInterval(() =>', response.data)
+
+    def test_completed_job_stream_returns_preview_event(self):
+        identity = {
+            "id": "user-1",
+            "email": "owner@example.com",
+            "is_anonymous": False,
+            "role": "owner",
+            "plan": "pro",
+            "subscription_status": "active",
+        }
+        project = {
+            "id": "job-1",
+            "source_url": "https://example.com",
+            "status": "done",
+            "file_count": 12,
+            "byte_count": 4096,
+            "failed_count": 1,
+            "metadata": {},
+        }
+        with (
+            patch.object(web_app, "ensure_identity", return_value=identity),
+            patch.object(web_app, "get_project", return_value=project),
+        ):
+            response = self.client.get("/api/jobs/job-1/stream")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "text/event-stream")
+        body = response.get_data(as_text=True)
+        self.assertIn('"event": "complete"', body)
+        self.assertIn('"/preview/job-1/"', body)
+
+    def test_preview_context_accepts_running_project_for_progressive_preview(self):
+        identity = {"id": "user-1"}
+        project = {
+            "id": "job-1",
+            "source_url": "https://example.com",
+            "status": "running",
+            "metadata": {},
+        }
+        with web_app.app.test_request_context("/preview/job-1/"):
+            with (
+                patch.object(web_app, "current_identity", return_value=identity),
+                patch.object(web_app, "get_project", return_value=project),
+            ):
+                ident, loaded_project, job = web_app._preview_project_context("job-1")
+        self.assertEqual(ident["id"], "user-1")
+        self.assertEqual(loaded_project["status"], "running")
+
+
 if __name__ == "__main__":
     unittest.main()
