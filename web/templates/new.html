@@ -376,7 +376,16 @@
         credentials: "same-origin",
         body: JSON.stringify({url:value})
       });
-      const data = await response.json().catch(() => ({}));
+      const raw = await response.text();
+      let data = {};
+      if (raw) {
+        try { data = JSON.parse(raw); }
+        catch {
+          throw new Error(response.ok
+            ? "The capture service returned an invalid response."
+            : "This deployment is not connected to the WebLoom capture backend.");
+        }
+      }
       if (!response.ok || !data.job?.id) {
         const error = new Error(data.error || "Capture could not be started.");
         error.upgradeRequired = !!data.upgrade_required;
