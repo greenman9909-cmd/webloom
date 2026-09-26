@@ -12,13 +12,14 @@ import socket
 import threading
 import time
 import uuid
+from queue import Queue, Empty
 from pathlib import Path
 from urllib.parse import urlparse, urljoin
 from html.parser import HTMLParser
 from xml.sax.saxutils import escape as xml_escape
 
 import requests
-from flask import Flask, abort, jsonify, render_template, request, send_file, send_from_directory, session, redirect, make_response
+from flask import Flask, Response, abort, jsonify, render_template, request, send_file, send_from_directory, session, redirect, make_response, stream_with_context
 
 from spa_ripper.path_utils import query_variant_relpath
 from spa_ripper.scraper import DEFAULT_USER_AGENT, SpaScraper
@@ -306,6 +307,20 @@ class JobLog(io.TextIOBase):
         pass
 
 
+def _emit_job_event(job_id: str, event: str, **payload):
+    callback = None
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job:
+            job["phase"] = payload.get("phase", job.get("phase"))
+            callback = job.get("event_callback")
+    if callback:
+        try:
+            callback({"event": event, **payload})
+        except Exception:
+            pass
+
+
 def normalize_target(raw_url: str) -> str:
     value = (raw_url or "").strip()
     if not value:
@@ -328,6 +343,7 @@ def job_public(job):
         "failed": job.get("failed", 0),
         "error": job.get("error"),
         "log": job.get("log", ""),
+        "phase": job.get("phase"),
         "preview_url": f"/preview/{job['id']}/" if job["status"] == "done" else None,
         "download_url": f"/api/jobs/{job['id']}/download" if job["status"] == "done" else None,
     }
@@ -337,12 +353,54 @@ def run_job(job_id):
     with _jobs_lock:
         job = _jobs[job_id]
         job["status"] = "running"
+        job["phase"] = "connecting"
+    _emit_job_event(job_id, "phase", phase="connecting", label="Connecting to target")
 
     output_dir = JOB_ROOT / job_id / "frontend"
     output_dir.mkdir(parents=True, exist_ok=True)
     writer = JobLog(job_id)
 
     try:
+        progressively_uploaded = set()
+        storage_prefix = f"projects/{job.get('user_id')}/{job_id}"
+
+        def on_scraper_progress(progress):
+            rel = progress.get("path")
+            if rel and progress.get("event") in {"root_saved", "asset_saved"} and supabase_ready():
+                file_path = output_dir / rel
+                if file_path.is_file():
+                    try:
+                        mime = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+                        storage_upload_file(
+                            f"{storage_prefix}/frontend/{rel}",
+                            file_path,
+                            mime,
+                            token=job.get("auth_token"),
+                        )
+                        progressively_uploaded.add(rel)
+                        progress["published"] = True
+                        if rel == "index.html":
+                            progress["preview_ready"] = True
+                    except Exception as exc:
+                        progress["publish_error"] = str(exc)[:180]
+
+            with _jobs_lock:
+                current = _jobs.get(job_id)
+                if current:
+                    current["files"] = progress.get("processed_count", current.get("files", 0))
+                    current["bytes"] = progress.get("total_bytes", current.get("bytes", 0))
+                    current["failed"] = progress.get("failed_count", current.get("failed", 0))
+                    current["phase"] = "capturing"
+            scrape_event = progress.get("event")
+            payload = {key: value for key, value in progress.items() if key != "event"}
+            _emit_job_event(
+                job_id,
+                "scrape",
+                phase="capturing",
+                scrape_event=scrape_event,
+                **payload,
+            )
+
         scraper = SpaScraper(
             base_url=job["url"],
             output_dir=str(output_dir),
@@ -350,6 +408,7 @@ def run_job(job_id):
             deep_assets=bool(job.get("deep_assets")),
             max_files=job.get("max_files"),
             max_bytes=job.get("max_bytes"),
+            progress_callback=on_scraper_progress,
         )
         safe_session = GuardedSession()
         safe_session.headers.update({"User-Agent": DEFAULT_USER_AGENT})
@@ -361,10 +420,12 @@ def run_job(job_id):
         if not (output_dir / "index.html").exists():
             raise RuntimeError("Capture finished without creating index.html.")
 
+        _emit_job_event(job_id, "phase", phase="indexing", label="Building project index")
         _write_project_reports(output_dir, job, scraper)
 
         fusion_state = {"configured": fusion_ready(), "status": "not_configured"}
         if fusion_ready():
+            _emit_job_event(job_id, "phase", phase="fusion", label="Running Fusion analysis")
             try:
                 fusion_payload = fusion_request(
                     "/v1/fusion",
@@ -406,11 +467,13 @@ def run_job(job_id):
                     "error": str(exc)[:240],
                 }
 
+        _emit_job_event(job_id, "phase", phase="packaging", label="Packaging project")
         archive_base = JOB_ROOT / job_id / "webloom-project"
         archive_path = archive_base.with_suffix(".zip")
         shutil.make_archive(str(archive_base), "zip", root_dir=str(output_dir))
 
         if supabase_ready():
+            _emit_job_event(job_id, "phase", phase="uploading", label="Publishing preview files")
             try:
                 owner_id = job.get("user_id")
                 storage_prefix = f"projects/{owner_id}/{job_id}"
@@ -418,6 +481,8 @@ def run_job(job_id):
                     if not file_path.is_file():
                         continue
                     rel = file_path.relative_to(output_dir).as_posix()
+                    if rel in progressively_uploaded:
+                        continue
                     mime = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
                     storage_upload_file(f"{storage_prefix}/frontend/{rel}", file_path, mime, token=job.get("auth_token"))
                 storage_upload_file(
@@ -436,6 +501,7 @@ def run_job(job_id):
             job["bytes"] = scraper.total_bytes
             job["failed"] = len(scraper.failed_urls)
             job["finished_at"] = time.time()
+            job["phase"] = "done"
 
         if supabase_ready():
             update_project(
@@ -457,6 +523,13 @@ def run_job(job_id):
                 finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             )
 
+        _emit_job_event(
+            job_id,
+            "complete",
+            phase="done",
+            job=job_public(job),
+        )
+
     except Exception as exc:
         writer.write(f"\n[!] {exc}\n")
         with _jobs_lock:
@@ -464,6 +537,8 @@ def run_job(job_id):
             job["status"] = "error"
             job["error"] = str(exc)
             job["finished_at"] = time.time()
+            job["phase"] = "error"
+        _emit_job_event(job_id, "error", phase="error", error=str(exc))
         if supabase_ready():
             update_project(
                 job_id,
@@ -1014,17 +1089,14 @@ def api_admin_rekt():
     return jsonify({"ok": True, "result": body.get("result", body)}), 200
 
 
-@app.post("/api/clone")
-@require_identity
-def clone():
-    payload = request.get_json(silent=True) or {}
+def _prepare_capture_job(payload):
     try:
         target = normalize_target(payload.get("url", ""))
     except ValueError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 400
+        return None, (jsonify({"ok": False, "error": str(exc)}), 400), None, False
 
     if not supabase_ready():
-        return jsonify({"ok": False, "error": "Database/auth service is not configured yet."}), 503
+        return None, (jsonify({"ok": False, "error": "Database/auth service is not configured yet."}), 503), None, False
 
     user = request.webloom_user
     network_key = _network_trial_key()
@@ -1039,7 +1111,7 @@ def clone():
             token=auth_token,
         )
     except RuntimeError as exc:
-        return jsonify({"ok": False, "error": str(exc)}), 503
+        return None, (jsonify({"ok": False, "error": str(exc)}), 503), device_id, device_is_new
 
     if not entitlement.get("allowed"):
         reason = entitlement.get("reason")
@@ -1049,12 +1121,12 @@ def clone():
             message = "The free capture for this browser has already been used. Upgrade to Pro to continue."
         else:
             message = "Your free capture has been used. Upgrade to Pro to continue."
-        return jsonify({
+        return None, (jsonify({
             "ok": False,
             "error": message,
             "upgrade_required": True,
             "reason": reason,
-        }), 402
+        }), 402), device_id, device_is_new
 
     try:
         create_project(
@@ -1066,7 +1138,7 @@ def clone():
     except RuntimeError as exc:
         if entitlement.get("reason") == "free":
             restore_free_capture(trial_key, token=auth_token)
-        return jsonify({"ok": False, "error": str(exc)}), 503
+        return None, (jsonify({"ok": False, "error": str(exc)}), 503), device_id, device_is_new
 
     is_paid = (
         user.get("role") == "owner"
@@ -1075,7 +1147,6 @@ def clone():
             and user.get("subscription_status") in {"active", "trialing"}
         )
     )
-
     deep_assets = bool(is_paid)
     max_files = 2000 if user.get("role") == "owner" else (1000 if is_paid else 250)
     max_bytes = (
@@ -1091,6 +1162,8 @@ def clone():
         metadata={
             "capture_mode": "deep" if deep_assets else "standard",
             "anonymous": bool(user.get("is_anonymous")),
+            "max_files": max_files,
+            "max_bytes": max_bytes,
         },
     )
 
@@ -1098,6 +1171,7 @@ def clone():
         "id": job_id,
         "url": target,
         "status": "queued",
+        "phase": "queued",
         "created_at": time.time(),
         "finished_at": None,
         "files": 0,
@@ -1117,10 +1191,32 @@ def clone():
     with _jobs_lock:
         _jobs[job_id] = job
 
+    return job, None, device_id, device_is_new
+
+
+@app.post("/api/clone/start")
+@require_identity
+def clone_start():
+    job, error_response, device_id, device_is_new = _prepare_capture_job(request.get_json(silent=True) or {})
+    if error_response:
+        return error_response
+    response = jsonify({"ok": True, "job": job_public(job), "stream_url": f"/api/jobs/{job['id']}/stream"})
+    if device_is_new:
+        response = _with_device_cookie(response, device_id=device_id)
+    return response, 202
+
+
+@app.post("/api/clone")
+@require_identity
+def clone():
+    job, error_response, device_id, device_is_new = _prepare_capture_job(request.get_json(silent=True) or {})
+    if error_response:
+        return error_response
+
     if SYNC_JOBS:
-        run_job(job_id)
+        run_job(job["id"])
         with _jobs_lock:
-            finished = _jobs.get(job_id, job)
+            finished = _jobs.get(job["id"], job)
         status_code = 201 if finished.get("status") == "done" else 500
         response = jsonify({
             "ok": finished.get("status") == "done",
@@ -1131,11 +1227,117 @@ def clone():
             response = _with_device_cookie(response, device_id=device_id)
         return response, status_code
 
-    threading.Thread(target=run_job, args=(job_id,), daemon=True).start()
+    threading.Thread(target=run_job, args=(job["id"],), daemon=True).start()
     response = jsonify({"ok": True, "job": job_public(job)})
     if device_is_new:
         response = _with_device_cookie(response, device_id=device_id)
     return response, 202
+
+
+@app.get("/api/jobs/<job_id>/stream")
+@require_identity
+def job_stream(job_id):
+    user = request.webloom_user
+    token = request.cookies.get("wl_access") or session.get("access_token")
+    project = get_project(user["id"], job_id, token=token) if supabase_ready() else None
+    if not project:
+        abort(404)
+
+    if project.get("status") == "done":
+        payload = {
+            "event": "complete",
+            "phase": "done",
+            "job": {
+                "id": project["id"],
+                "url": project["source_url"],
+                "status": "done",
+                "files": project.get("file_count", 0),
+                "bytes": project.get("byte_count", 0),
+                "failed": project.get("failed_count", 0),
+                "preview_url": f"/preview/{job_id}/",
+                "download_url": f"/api/jobs/{job_id}/download",
+            },
+        }
+        return Response(
+            f"data: {json.dumps(payload)}\n\n",
+            mimetype="text/event-stream",
+            headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+        )
+
+    metadata = project.get("metadata") or {}
+    deep_assets = metadata.get("capture_mode") == "deep"
+    max_files = int(metadata.get("max_files") or (2000 if user.get("role") == "owner" else 250))
+    max_bytes = int(metadata.get("max_bytes") or (500 * 1024 * 1024 if user.get("role") == "owner" else 50 * 1024 * 1024))
+
+    events = Queue()
+
+    def event_callback(event):
+        events.put(event)
+
+    job = {
+        "id": job_id,
+        "url": project["source_url"],
+        "status": "queued",
+        "phase": "queued",
+        "created_at": time.time(),
+        "finished_at": None,
+        "files": project.get("file_count", 0),
+        "bytes": project.get("byte_count", 0),
+        "failed": project.get("failed_count", 0),
+        "error": None,
+        "log": "",
+        "user_id": user["id"],
+        "entitlement_reason": "owner" if user.get("role") == "owner" else ("pro" if user.get("plan") == "pro" else "free"),
+        "trial_key": None,
+        "deep_assets": deep_assets,
+        "max_files": max_files,
+        "max_bytes": max_bytes,
+        "auth_token": token,
+        "event_callback": event_callback,
+    }
+
+    with _jobs_lock:
+        _jobs[job_id] = job
+
+    update_project(job_id, token=token, status="running")
+
+    worker = threading.Thread(target=run_job, args=(job_id,), daemon=True)
+    worker.start()
+
+    @stream_with_context
+    def generate():
+        yield f"data: {json.dumps({'event': 'phase', 'phase': 'queued', 'label': 'Capture worker started'})}\n\n"
+        last_heartbeat = time.time()
+        while worker.is_alive() or not events.empty():
+            try:
+                event = events.get(timeout=0.75)
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+                if event.get("event") in {"complete", "error"}:
+                    break
+            except Empty:
+                now = time.time()
+                if now - last_heartbeat >= 8:
+                    last_heartbeat = now
+                    with _jobs_lock:
+                        current = _jobs.get(job_id) or {}
+                    heartbeat = {
+                        "event": "heartbeat",
+                        "phase": current.get("phase", "capturing"),
+                        "files": current.get("files", 0),
+                        "bytes": current.get("bytes", 0),
+                        "failed": current.get("failed", 0),
+                    }
+                    yield f"data: {json.dumps(heartbeat)}\n\n"
+
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.get("/api/jobs")
@@ -1396,7 +1598,7 @@ def _preview_project_context(job_id):
             pass
 
     if project:
-        if project.get("status") != "done":
+        if project.get("status") not in {"running", "done"}:
             abort(404)
     elif job:
         if job.get("status") != "done":

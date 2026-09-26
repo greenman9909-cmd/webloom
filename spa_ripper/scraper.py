@@ -82,6 +82,7 @@ class SpaScraper:
         deep_assets: bool = True,
         max_files: Optional[int] = None,
         max_bytes: Optional[int] = None,
+        progress_callback=None,
     ):
         self.base_url = base_url if base_url.endswith("/") else base_url + "/"
         parsed_base = urlparse(self.base_url)
@@ -101,6 +102,23 @@ class SpaScraper:
         self.processed_count = 0
         self.total_bytes = 0
         self.failed_urls: List[tuple] = []
+        self.progress_callback = progress_callback
+
+    def _emit(self, event: str, **payload):
+        callback = self.progress_callback
+        if not callback:
+            return
+        try:
+            callback({
+                "event": event,
+                "processed_count": self.processed_count,
+                "total_bytes": self.total_bytes,
+                "failed_count": len(self.failed_urls),
+                "queued_count": len(self.queue),
+                **payload,
+            })
+        except Exception:
+            pass
 
     def normalize_url(self, raw_url: str, context_url: str) -> str:
         """Resolve relative URLs and remove hash fragments while preserving query strings."""
@@ -182,6 +200,7 @@ class SpaScraper:
     def run(self):
         os.makedirs(self.output_dir, exist_ok=True)
         print(f"[*] Target URL:  {self.base_url}")
+        self._emit("start", url=self.base_url)
         print(f"[*] Output Dir:  {os.path.abspath(self.output_dir)}")
         print("=" * 60)
 
@@ -201,6 +220,7 @@ class SpaScraper:
             self.processed_count += 1
             self.queued_set.add(self.normalize_url(self.base_url, self.base_url))
             print(f"[OK] Saved index.html ({html_size:,} bytes)")
+            self._emit("root_saved", path="index.html", url=self.base_url, bytes=html_size)
 
             # Enqueue initial root assets
             for asset in self.extract_html_assets(root_html, self.base_url):
@@ -235,6 +255,7 @@ class SpaScraper:
                 if res.status_code != 200:
                     print(f"[-] [SKIP {res.status_code}] {current_url}")
                     self.failed_urls.append((current_url, f"HTTP {res.status_code}"))
+                    self._emit("skipped", url=current_url, reason=f"HTTP {res.status_code}")
                     continue
 
                 content = res.content
@@ -250,6 +271,13 @@ class SpaScraper:
                 self.processed_count += 1
                 rel_dest = os.path.relpath(local_path, self.output_dir)
                 print(f"[+] [{self.processed_count}] {rel_dest} ({size:,} bytes)")
+                self._emit(
+                    "asset_saved",
+                    url=current_url,
+                    path=rel_dest.replace("\\", "/"),
+                    bytes=size,
+                    content_type=res.headers.get("Content-Type", ""),
+                )
 
                 content_type = res.headers.get("Content-Type", "").lower()
 
@@ -275,6 +303,7 @@ class SpaScraper:
             except Exception as exc:
                 print(f"[!] [FAIL] {current_url}: {exc}")
                 self.failed_urls.append((current_url, str(exc)))
+                self._emit("failed", url=current_url, reason=str(exc)[:240])
 
         # Summary
         print("\n" + "=" * 60)
@@ -283,3 +312,4 @@ class SpaScraper:
         print(f"Total downloaded:    {self.total_bytes / (1024 * 1024):.2f} MB ({self.total_bytes:,} bytes)")
         print(f"Failed / unreachable:{len(self.failed_urls)}")
         print("=" * 60)
+        self._emit("complete")
