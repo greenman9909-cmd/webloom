@@ -337,3 +337,5 @@ background-size:24px 24px,24px 24px,auto}
   .live-dot,.session-status i,.signal-bars i,.activity-pulse,.radar-ring,.preview-file-stream span:after{animation:none!important}
   .activity-row{animation:none}
 }
+
+.plan-chip .btn.owner-active{pointer-events:none;background:linear-gradient(100deg,#ecfbf4,#eef5ff);border-color:#d5eee2;color:#22835d;box-shadow:none}
