@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 import web_app
+import webloom_integrations
 
 
 class WebAppTests(unittest.TestCase):
@@ -120,7 +121,7 @@ class WebAppTests(unittest.TestCase):
             "metadata": {},
         }
         with (
-            patch.object(web_app, "ensure_identity", return_value=identity),
+            patch.object(webloom_integrations, "ensure_identity", return_value=identity),
             patch.object(web_app, "get_project", return_value=project),
         ):
             response = self.client.get("/api/jobs/job-1/stream")
