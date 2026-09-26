@@ -1,4 +1,7 @@
 import os
+import hashlib
+import secrets
+from datetime import datetime, timezone
 from functools import wraps
 
 import requests
@@ -501,3 +504,119 @@ def claim_owner(code, token=None):
     if not r.ok:
         raise RuntimeError("Could not claim owner access.")
     return r.json()
+
+
+def create_api_key(user_id, name="Default key"):
+    headers = _service_headers()
+    if not headers:
+        raise RuntimeError("Server API-key management is not configured.")
+    raw_key = "wl_" + secrets.token_urlsafe(32)
+    key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    prefix = raw_key[:12]
+    r = requests.post(
+        f"{SUPABASE_URL}/rest/v1/api_keys",
+        headers={**headers, "Prefer": "return=representation"},
+        json={
+            "user_id": user_id,
+            "name": (name or "Default key")[:80],
+            "key_prefix": prefix,
+            "key_hash": key_hash,
+        },
+        timeout=20,
+    )
+    if not r.ok:
+        raise RuntimeError(_auth_error(r, "Could not create API key."))
+    rows = r.json()
+    row = rows[0] if isinstance(rows, list) and rows else (rows or {})
+    return raw_key, row
+
+
+def list_api_keys(user_id, token=None):
+    token = token or _session_token()
+    if not token:
+        return []
+    r = requests.get(
+        f"{SUPABASE_URL}/rest/v1/api_keys",
+        headers=_sb_headers(token),
+        params={
+            "user_id": f"eq.{user_id}",
+            "select": "id,name,key_prefix,created_at,last_used_at,revoked_at",
+            "order": "created_at.desc",
+        },
+        timeout=20,
+    )
+    return r.json() if r.ok else []
+
+
+def revoke_api_key(user_id, key_id, token=None):
+    token = token or _session_token()
+    if not token:
+        raise RuntimeError("Authentication required.")
+    r = requests.patch(
+        f"{SUPABASE_URL}/rest/v1/api_keys",
+        headers={**_sb_headers(token), "Prefer": "return=minimal"},
+        params={"id": f"eq.{key_id}", "user_id": f"eq.{user_id}"},
+        json={"revoked_at": datetime.now(timezone.utc).isoformat()},
+        timeout=20,
+    )
+    if not r.ok:
+        raise RuntimeError(_auth_error(r, "Could not revoke API key."))
+    return True
+
+
+def identity_from_api_key(raw_key):
+    if not raw_key or not raw_key.startswith("wl_"):
+        return None
+    headers = _service_headers()
+    if not headers:
+        return None
+    key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    r = requests.get(
+        f"{SUPABASE_URL}/rest/v1/api_keys",
+        headers={**headers, "Accept": "application/vnd.pgrst.object+json"},
+        params={
+            "key_hash": f"eq.{key_hash}",
+            "revoked_at": "is.null",
+            "select": "id,user_id,name",
+        },
+        timeout=20,
+    )
+    if not r.ok:
+        return None
+    key_row = r.json() or {}
+    user_id = key_row.get("user_id")
+    if not user_id:
+        return None
+
+    profile_response = requests.get(
+        f"{SUPABASE_URL}/rest/v1/profiles",
+        headers={**headers, "Accept": "application/vnd.pgrst.object+json"},
+        params={"id": f"eq.{user_id}", "select": "*"},
+        timeout=20,
+    )
+    if not profile_response.ok:
+        return None
+    profile = profile_response.json() or {}
+
+    requests.patch(
+        f"{SUPABASE_URL}/rest/v1/api_keys",
+        headers={**headers, "Prefer": "return=minimal"},
+        params={"id": f"eq.{key_row.get('id')}"},
+        json={"last_used_at": datetime.now(timezone.utc).isoformat()},
+        timeout=10,
+    )
+
+    return {
+        "id": user_id,
+        "email": profile.get("email") or "",
+        "is_anonymous": bool(profile.get("is_anonymous")),
+        "role": profile.get("role", "user"),
+        "plan": profile.get("plan", "free"),
+        "subscription_status": profile.get("subscription_status"),
+        "free_capture_used": bool(profile.get("free_capture_used")),
+        "stripe_customer_id": profile.get("stripe_customer_id"),
+        "display_name": profile.get("display_name") or "",
+        "settings": profile.get("settings") or {},
+        "api_key_id": key_row.get("id"),
+        "api_key_name": key_row.get("name") or "",
+    }
