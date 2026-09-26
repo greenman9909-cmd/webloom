@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import shutil
 import socket
 import threading
@@ -21,6 +22,7 @@ from flask import Flask, abort, jsonify, render_template, request, send_file, se
 
 from spa_ripper.path_utils import query_variant_relpath
 from spa_ripper.scraper import DEFAULT_USER_AGENT, SpaScraper
+from fusion_client import fusion_ready, fusion_request
 from webloom_integrations import (
     auth_signup,
     auth_signin,
@@ -357,6 +359,49 @@ def run_job(job_id):
 
         _write_project_reports(output_dir, job, scraper)
 
+        fusion_state = {"configured": fusion_ready(), "status": "not_configured"}
+        if fusion_ready():
+            try:
+                fusion_payload = fusion_request(
+                    "/v1/fusion",
+                    {
+                        "url": job["url"],
+                        "limit": 50 if job.get("deep_assets") else 15,
+                        "max_depth": 2 if job.get("deep_assets") else 1,
+                        "timeout": 20,
+                    },
+                    timeout=240,
+                )
+                manifest = fusion_payload.get("manifest") or {}
+                (output_dir / "fusion.json").write_text(
+                    json.dumps(manifest, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+                allowed_artifacts = {
+                    "dataset.jsonl",
+                    "knowledge_base.md",
+                    "graph.json",
+                    "audit.json",
+                }
+                for name, body in (fusion_payload.get("artifacts") or {}).items():
+                    if name not in allowed_artifacts or not isinstance(body, str):
+                        continue
+                    (output_dir / name).write_text(body, encoding="utf-8")
+                fusion_state = {
+                    "configured": True,
+                    "status": "done",
+                    "pages": (manifest.get("stats") or {}).get("pages_fused", 0),
+                    "words": (manifest.get("stats") or {}).get("total_words", 0),
+                    "graph_edges": (manifest.get("stats") or {}).get("total_graph_edges", 0),
+                }
+            except Exception as exc:
+                writer.write(f"\n[!] Fusion analysis unavailable: {exc}\n")
+                fusion_state = {
+                    "configured": True,
+                    "status": "error",
+                    "error": str(exc)[:240],
+                }
+
         archive_base = JOB_ROOT / job_id / "webloom-project"
         archive_path = archive_base.with_suffix(".zip")
         shutil.make_archive(str(archive_base), "zip", root_dir=str(output_dir))
@@ -400,6 +445,7 @@ def run_job(job_id):
                     "capture_mode": "deep" if job.get("deep_assets") else "standard",
                     "max_files": job.get("max_files"),
                     "max_bytes": job.get("max_bytes"),
+                    "fusion": fusion_state,
                 },
                 finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             )
@@ -536,6 +582,7 @@ def health():
         "service": "WebLoom",
         "supabase": supabase_ready(),
         "stripe": bool(STRIPE_SECRET_KEY and STRIPE_PRO_PRICE_ID),
+        "fusion": fusion_ready(),
     })
 
 
