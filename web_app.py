@@ -13,7 +13,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 from html.parser import HTMLParser
 from xml.sax.saxutils import escape as xml_escape
 
@@ -1013,20 +1013,232 @@ def job_download(job_id):
     )
 
 
-def _serve_preview_file(job_id, asset_path, remember=False):
+
+_PREVIEW_ASSET_EXTENSIONS = (
+    "js|mjs|cjs|css|json|woff2?|ttf|eot|png|jpe?g|webp|avif|gif|svg|ico|"
+    "mp4|webm|mov|m3u8|mp3|ogg|wav|m4a|vtt|srt|webmanifest"
+)
+
+
+def _preview_rewrite_html(data: bytes, job_id: str) -> bytes:
+    text = data.decode("utf-8", errors="replace")
+    prefix = f"/preview/{job_id}/"
+    proxy_prefix = prefix + "__origin/"
+
+    # Captured pages may carry a base/CSP that points back to the source site.
+    text = re.sub(r"(?is)<base\b[^>]*>", "", text)
+    text = re.sub(
+        r'(?is)<meta\b[^>]+http-equiv=["\']content-security-policy["\'][^>]*>',
+        "",
+        text,
+    )
+
+    def attr_repl(match):
+        return f'{match.group(1)}={match.group(2)}{prefix}{match.group(3)}'
+
+    text = re.sub(
+        r'(?i)\b(src|href|poster)\s*=\s*(["\'])/(?!/)([^"\']*)',
+        attr_repl,
+        text,
+    )
+
+    def srcset_repl(match):
+        quote = match.group(1)
+        raw = match.group(2)
+        parts = []
+        for item in raw.split(","):
+            bits = item.strip().split()
+            if bits and bits[0].startswith("/") and not bits[0].startswith("//"):
+                bits[0] = prefix + bits[0].lstrip("/")
+            parts.append(" ".join(bits))
+        return f"srcset={quote}{', '.join(parts)}{quote}"
+
+    text = re.sub(
+        r'(?i)srcset\s*=\s*(["\'])([^"\']*)\1',
+        srcset_repl,
+        text,
+    )
+    text = re.sub(
+        r'(?i)url\(\s*(["\']?)/(?!/)',
+        lambda m: f"url({m.group(1)}{prefix}",
+        text,
+    )
+
+    bridge = f"""<base href="{prefix}">
+<script>
+(() => {{
+  const previewRoot = {json.dumps(prefix)};
+  const proxyRoot = {json.dumps(proxy_prefix)};
+  const remap = value => {{
+    if (typeof value !== "string") return value;
+    if (value.startsWith("/") && !value.startsWith("//") && !value.startsWith(previewRoot)) {{
+      return proxyRoot + value.replace(/^\\/+/, "");
+    }}
+    return value;
+  }};
+  const nativeFetch = window.fetch;
+  if (nativeFetch) {{
+    window.fetch = function(input, init) {{
+      if (typeof input === "string") input = remap(input);
+      return nativeFetch.call(this, input, init);
+    }};
+  }}
+  const nativeOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(method, url, ...rest) {{
+    return nativeOpen.call(this, method, remap(url), ...rest);
+  }};
+}})();
+</script>"""
+    if re.search(r"(?i)<head[^>]*>", text):
+        text = re.sub(r"(?i)(<head[^>]*>)", r"\1" + bridge, text, count=1)
+    else:
+        text = bridge + text
+    return text.encode("utf-8")
+
+
+def _preview_rewrite_css(data: bytes, job_id: str) -> bytes:
+    text = data.decode("utf-8", errors="replace")
+    prefix = f"/preview/{job_id}/"
+    text = re.sub(
+        r'(?i)url\(\s*(["\']?)/(?!/)',
+        lambda m: f"url({m.group(1)}{prefix}",
+        text,
+    )
+    text = re.sub(
+        r'(?i)(@import\s+["\'])/(?!/)',
+        lambda m: m.group(1) + prefix,
+        text,
+    )
+    return text.encode("utf-8")
+
+
+def _preview_rewrite_js(data: bytes, job_id: str) -> bytes:
+    # Rewrite only obvious root-relative static asset strings. Runtime API calls
+    # are handled by the preview bridge and its read-only origin proxy.
+    text = data.decode("utf-8", errors="replace")
+    prefix = f"/preview/{job_id}/"
+    pattern = re.compile(
+        rf'(["\'\x60])/(?!/)([^"\'\x60\r\n]{{1,500}}\.(?:{_PREVIEW_ASSET_EXTENSIONS})(?:\?[^"\'\x60\r\n]*)?)\1',
+        re.I,
+    )
+    text = pattern.sub(lambda m: f"{m.group(1)}{prefix}{m.group(2)}{m.group(1)}", text)
+    return text.encode("utf-8")
+
+
+def _preview_response(data: bytes, content_type: str, job_id: str):
+    content_type = (content_type or "application/octet-stream").split(";", 1)[0].strip().lower()
+    if len(data) <= 12 * 1024 * 1024:
+        if content_type in {"text/html", "application/xhtml+xml"}:
+            data = _preview_rewrite_html(data, job_id)
+        elif content_type == "text/css":
+            data = _preview_rewrite_css(data, job_id)
+        elif content_type in {
+            "application/javascript",
+            "text/javascript",
+            "application/x-javascript",
+            "text/ecmascript",
+            "application/ecmascript",
+        }:
+            data = _preview_rewrite_js(data, job_id)
+
+    response = app.response_class(data, mimetype=content_type)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+def _preview_project_context(job_id):
     ident = current_identity()
     if not ident:
         abort(401)
-
     project = get_project(ident["id"], job_id) if supabase_ready() else None
     with _jobs_lock:
         job = _jobs.get(job_id)
-
     if project:
         if project.get("status") != "done":
             abort(404)
     elif not job or job.get("user_id") != ident["id"] or job.get("status") != "done":
         abort(404)
+    return ident, project, job
+
+
+@app.route("/preview/<job_id>/__origin/<path:asset_path>", methods=["GET", "HEAD"])
+def preview_origin_proxy(job_id, asset_path):
+    _, project, job = _preview_project_context(job_id)
+    source_url = (project or {}).get("source_url") or (job or {}).get("url")
+    if not source_url:
+        abort(404)
+    parsed_source = urlparse(source_url)
+    origin = f"{parsed_source.scheme}://{parsed_source.netloc}"
+    target = urljoin(origin + "/", asset_path)
+    parsed_target = urlparse(target)
+    if (parsed_target.hostname or "").lower() != (parsed_source.hostname or "").lower():
+        abort(403)
+    query = request.query_string.decode("utf-8", errors="ignore")
+    if query:
+        target += ("&" if "?" in target else "?") + query
+    try:
+        _validate_public_url(target)
+        safe_session = GuardedSession()
+        safe_session.headers.update({
+            "User-Agent": DEFAULT_USER_AGENT,
+            "Accept": request.headers.get("Accept", "*/*"),
+        })
+        upstream = safe_session.request(
+            request.method,
+            target,
+            timeout=15,
+            allow_redirects=False,
+            stream=True,
+        )
+    except Exception:
+        abort(502)
+
+    if 300 <= upstream.status_code < 400:
+        location = upstream.headers.get("Location")
+        if not location:
+            abort(404)
+        redirected = urljoin(target, location)
+        if (urlparse(redirected).hostname or "").lower() != (parsed_source.hostname or "").lower():
+            abort(403)
+        try:
+            _validate_public_url(redirected)
+            upstream = safe_session.request(
+                request.method,
+                redirected,
+                timeout=15,
+                allow_redirects=False,
+                stream=True,
+            )
+        except Exception:
+            abort(502)
+
+    if upstream.status_code >= 400:
+        return app.response_class(status=upstream.status_code)
+
+    size_header = upstream.headers.get("Content-Length")
+    if size_header:
+        try:
+            if int(size_header) > 12 * 1024 * 1024:
+                abort(413)
+        except ValueError:
+            pass
+
+    if request.method == "HEAD":
+        return app.response_class(status=upstream.status_code)
+
+    data = upstream.raw.read(12 * 1024 * 1024 + 1, decode_content=True)
+    if len(data) > 12 * 1024 * 1024:
+        abort(413)
+    return _preview_response(
+        data,
+        upstream.headers.get("Content-Type") or "application/octet-stream",
+        job_id,
+    )
+
+
+def _serve_preview_file(job_id, asset_path, remember=False):
+    ident, project, job = _preview_project_context(job_id)
 
     request_rel = asset_path or "index.html"
     query = request.query_string.decode("utf-8", errors="ignore")
@@ -1056,13 +1268,12 @@ def _serve_preview_file(job_id, asset_path, remember=False):
             stored = storage_download(f"{prefix}/frontend/{rel}")
             if stored:
                 data, content_type = stored
-                response = app.response_class(data, mimetype=content_type)
-                return finish(response)
+                return finish(_preview_response(data, content_type, job_id))
         if "." not in Path(request_rel).name:
             stored = storage_download(f"{prefix}/frontend/index.html")
             if stored:
                 data, content_type = stored
-                return finish(app.response_class(data, mimetype=content_type))
+                return finish(_preview_response(data, content_type, job_id))
         abort(404)
 
     root = (JOB_ROOT / job_id / "frontend").resolve()
@@ -1071,10 +1282,14 @@ def _serve_preview_file(job_id, asset_path, remember=False):
         if target != root and root not in target.parents:
             abort(404)
         if target.is_file():
-            return finish(send_from_directory(root, rel))
+            data = target.read_bytes()
+            content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+            return finish(_preview_response(data, content_type, job_id))
 
     if "." not in Path(request_rel).name:
-        return finish(send_from_directory(root, "index.html"))
+        index_file = root / "index.html"
+        if index_file.is_file():
+            return finish(_preview_response(index_file.read_bytes(), "text/html", job_id))
 
     abort(404)
 
