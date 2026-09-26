@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "fluid": true,
+  "builds": [
+    {
+      "src": "web_app.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "functions": {
+    "web_app.py": {
+      "maxDuration": 300,
+      "excludeFiles": "{tests/**,android/**,test-output/**,SPA-Ripper.apk}"
+    }
+  },
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "web_app.py"
+    }
+  ]
+}
