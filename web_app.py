@@ -1245,7 +1245,7 @@ def _preview_rewrite_html(data: bytes, job_id: str) -> bytes:
 }})();
 </script>"""
     if re.search(r"(?i)<head[^>]*>", text):
-        text = re.sub(r"(?i)(<head[^>]*>)", r"\1" + bridge, text, count=1)
+        text = re.sub(r"(?i)(<head[^>]*>)", lambda m: m.group(1) + bridge, text, count=1)
     else:
         text = bridge + text
     return text.encode("utf-8")
