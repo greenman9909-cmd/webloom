@@ -391,11 +391,14 @@ def run_job(job_id):
                     current["bytes"] = progress.get("total_bytes", current.get("bytes", 0))
                     current["failed"] = progress.get("failed_count", current.get("failed", 0))
                     current["phase"] = "capturing"
+            scrape_event = progress.get("event")
+            payload = {key: value for key, value in progress.items() if key != "event"}
             _emit_job_event(
                 job_id,
                 "scrape",
                 phase="capturing",
-                **progress,
+                scrape_event=scrape_event,
+                **payload,
             )
 
         scraper = SpaScraper(
