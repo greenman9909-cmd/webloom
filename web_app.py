@@ -476,13 +476,6 @@ def run_job(job_id):
             job["finished_at"] = time.time()
             job["phase"] = "done"
 
-        _emit_job_event(
-            job_id,
-            "complete",
-            phase="done",
-            job=job_public(job),
-        )
-
         if supabase_ready():
             update_project(
                 job_id,
@@ -502,6 +495,13 @@ def run_job(job_id):
                 },
                 finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             )
+
+        _emit_job_event(
+            job_id,
+            "complete",
+            phase="done",
+            job=job_public(job),
+        )
 
     except Exception as exc:
         writer.write(f"\n[!] {exc}\n")
