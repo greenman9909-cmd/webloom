@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#ffffff"><meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/__spa_ui/static/webloom-app.css"><title>Owner console · WebLoom</title></head>
+<body><div class="shell">
+<aside class="sidebar">
+<a class="brand" href="/"><span class="brand-mark"></span><span>WebLoom</span></a>
+<div class="nav-label">Workspace</div><nav class="side-nav">
+<a href="/dashboard"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>Overview</a>
+<a href="/new"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New capture</a>
+<a href="/project"><svg viewBox="0 0 24 24"><path d="M4 6h6l2 2h8v10H4z"/></svg>Projects</a>
+</nav>
+<div class="nav-label">Owner</div><nav class="side-nav">
+<a class="active" href="/admin"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM8 9h8M8 13h5"/></svg>Owner console</a>
+<a href="/billing"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4zM4 10h16"/></svg>Billing</a>
+<a href="/settings"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>Settings</a>
+</nav>
+<div class="side-foot"><div class="plan-chip"><b>Owner access</b><p>Unlimited captures + private tools.</p></div></div>
+</aside>
+<main class="main">
+<header class="topbar"><div class="topbar-left"><button class="btn mobile-menu" data-menu aria-label="Open navigation"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><span class="page-title">Owner console</span></div><div class="top-actions"><a class="btn hide-mobile" href="/">View site</a><a class="avatar" href="/account">WL</a></div></header>
+<div class="content">
+<div class="hero-row reveal"><div><span class="badge">Private</span><h1 style="margin-top:10px">Owner tools</h1><p>Private diagnostics and product controls. Nothing on this page is exposed to normal WebLoom accounts.</p></div></div>
+<div class="grid cols-2 reveal">
+<section class="card owner-card"><div class="owner-card-head"><span class="metric-icon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span><div><h2>SPA-REKT private audit</h2><p>Runs only through the private service and only for hosts on your server-side allowlist.</p></div></div>
+<div class="field"><label>Authorized site URL</label><input id="rektUrl" inputmode="url" placeholder="https://your-site.example"></div>
+<button class="btn dark full" id="rektRun" type="button">Run private audit →</button>
+<div class="owner-output" id="rektOutput" aria-live="polite">Private service status will appear here.</div>
+</section>
+<section class="card owner-card"><div class="owner-card-head"><span class="metric-icon"><svg viewBox="0 0 24 24"><path d="M12 3 19 6v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/></svg></span><div><h2>Owner entitlement</h2><p>Your owner role bypasses the free-use counter and paid-plan gate. The role lives in the database, never in browser storage.</p></div></div>
+<div class="owner-facts"><div><b>Captures</b><span>Unlimited</span></div><div><b>Billing</b><span>Not required</span></div><div><b>Private tools</b><span>Owner only</span></div><div><b>Public UI</b><span>SPA-REKT hidden</span></div></div>
+</section>
+</div>
+<div class="notice reveal">Private audit requests require both the owner role and a server-side hostname allowlist. The public WebLoom capture workflow never exposes this tool.</div>
+</div></main></div>
+<script src="/__spa_ui/static/webloom-app.js"></script>
+<script>
+(async()=>{
+  const out=document.getElementById("rektOutput"),btn=document.getElementById("rektRun"),field=document.getElementById("rektUrl");
+  try{
+    const me=await fetch("/api/me").then(r=>r.json());
+    if(!me.authenticated){location.href="/signin?next=%2Fadmin";return}
+    if(me.user?.role!=="owner"){location.href="/dashboard";return}
+  }catch{location.href="/dashboard";return}
+  btn.addEventListener("click",async()=>{
+    const url=field.value.trim();
+    if(!url){field.focus();return}
+    btn.disabled=true;btn.textContent="Running…";out.textContent="Starting private audit…";
+    try{
+      const r=await fetch("/api/admin/rekt",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url})});
+      const d=await r.json();if(!r.ok)throw new Error(d.error||"Audit failed.");
+      out.textContent=JSON.stringify(d.result,null,2);
+    }catch(e){out.textContent=e.message}
+    finally{btn.disabled=false;btn.textContent="Run private audit →"}
+  });
+})();
+</script></body></html>
