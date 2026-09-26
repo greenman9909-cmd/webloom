@@ -46,6 +46,10 @@ from webloom_integrations import (
     auth_recover,
     update_user_profile,
     claim_owner,
+    create_api_key,
+    list_api_keys,
+    revoke_api_key,
+    identity_from_api_key,
 )
 
 
@@ -527,6 +531,24 @@ def settings_page():
     return render_template("settings.html")
 
 
+@app.get("/api-keys")
+def api_keys_page():
+    ident = current_identity()
+    if not ident:
+        return redirect("/signin?next=/api-keys")
+    if ident.get("is_anonymous") or not ident.get("email"):
+        return redirect("/signup?next=/api-keys")
+    return render_template("api_keys.html")
+
+
+@app.get("/docs")
+@app.get("/docs/api")
+@app.get("/docs/mcp")
+def docs_page():
+    section = "mcp" if request.path.endswith("/mcp") else ("api" if request.path.endswith("/api") else "start")
+    return render_template("docs.html", section=section)
+
+
 @app.get("/admin")
 def admin_page():
     ident = current_identity()
@@ -698,6 +720,139 @@ def api_project(project_id):
     if not project:
         abort(404)
     return jsonify({"project": project})
+
+
+@app.get("/api/api-keys")
+@require_user
+def api_key_list():
+    if request.webloom_user.get("is_anonymous"):
+        return jsonify({"ok": False, "error": "Create a permanent account to use API keys."}), 409
+    token = request.cookies.get("wl_access") or session.get("access_token")
+    return jsonify({"ok": True, "keys": list_api_keys(request.webloom_user["id"], token=token)})
+
+
+@app.post("/api/api-keys")
+@require_user
+def api_key_create():
+    if request.webloom_user.get("is_anonymous") or not request.webloom_user.get("email"):
+        return jsonify({"ok": False, "error": "Create a permanent account to use API keys."}), 409
+    payload = request.get_json(silent=True) or {}
+    name = (payload.get("name") or "Default key").strip()[:80]
+    try:
+        raw_key, row = create_api_key(request.webloom_user["id"], name=name)
+    except RuntimeError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 503
+    return jsonify({
+        "ok": True,
+        "key": raw_key,
+        "record": {
+            "id": row.get("id"),
+            "name": row.get("name"),
+            "key_prefix": row.get("key_prefix"),
+            "created_at": row.get("created_at"),
+        },
+        "warning": "Copy this key now. WebLoom does not store the raw key.",
+    }), 201
+
+
+@app.delete("/api/api-keys/<key_id>")
+@require_user
+def api_key_revoke(key_id):
+    token = request.cookies.get("wl_access") or session.get("access_token")
+    try:
+        revoke_api_key(request.webloom_user["id"], key_id, token=token)
+    except RuntimeError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    return jsonify({"ok": True})
+
+
+def _public_api_identity():
+    authorization = request.headers.get("Authorization", "")
+    if authorization.lower().startswith("bearer "):
+        raw_key = authorization.split(" ", 1)[1].strip()
+        ident = identity_from_api_key(raw_key)
+        if ident:
+            return ident
+    return current_identity()
+
+
+def _public_api_limits(identity, operation, payload):
+    owner = identity.get("role") == "owner"
+    pro = identity.get("plan") == "pro" and identity.get("subscription_status") in {"active", "trialing"}
+    if operation in {"crawl", "extract", "fusion"} and not (owner or pro):
+        return None, (jsonify({
+            "ok": False,
+            "error": "This API operation requires WebLoom Pro.",
+            "upgrade_required": True,
+        }), 403)
+
+    safe_payload = dict(payload or {})
+    if operation == "scrape":
+        safe_payload["limit"] = 1
+        safe_payload["max_depth"] = 0
+    elif operation == "map":
+        safe_payload["limit"] = min(int(safe_payload.get("limit") or 100), 5000 if owner else (1000 if pro else 100))
+    else:
+        requested = int(safe_payload.get("limit") or safe_payload.get("max_pages") or 25)
+        safe_payload["limit"] = min(requested, 250 if owner else 100)
+        safe_payload["max_depth"] = min(int(safe_payload.get("max_depth") or 2), 4 if owner else 3)
+    return safe_payload, None
+
+
+@app.post("/v1/<operation>")
+def public_fusion_api(operation):
+    if operation not in {"scrape", "map", "crawl", "extract", "fusion"}:
+        abort(404)
+    identity = _public_api_identity()
+    if not identity:
+        return jsonify({
+            "ok": False,
+            "error": "Authenticate with Authorization: Bearer wl_... or a signed-in WebLoom session.",
+        }), 401
+    if identity.get("is_anonymous"):
+        return jsonify({"ok": False, "error": "API access requires a permanent WebLoom account."}), 401
+    if not fusion_ready():
+        return jsonify({"ok": False, "error": "Fusion service is not configured."}), 503
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        safe_payload, denial = _public_api_limits(identity, operation, payload)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "error": "Invalid numeric API option."}), 400
+    if denial:
+        return denial
+    try:
+        result = fusion_request(f"/v1/{operation}", safe_payload, timeout=240)
+    except RuntimeError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 502
+    return jsonify(result)
+
+
+@app.get("/v1/openapi.json")
+def public_openapi():
+    base = PUBLIC_APP_URL or request.host_url.rstrip("/")
+    return jsonify({
+        "openapi": "3.1.0",
+        "info": {
+            "title": "WebLoom API",
+            "version": "1.0.0",
+            "description": "Public-web scrape, map, crawl, extract and Fusion endpoints.",
+        },
+        "servers": [{"url": base}],
+        "components": {
+            "securitySchemes": {
+                "bearerAuth": {"type": "http", "scheme": "bearer"}
+            }
+        },
+        "security": [{"bearerAuth": []}],
+        "paths": {
+            "/v1/scrape": {"post": {"summary": "Scrape one public page into Markdown and metadata"}},
+            "/v1/map": {"post": {"summary": "Discover public URLs on a site"}},
+            "/v1/crawl": {"post": {"summary": "Crawl a public site into page records"}},
+            "/v1/extract": {"post": {"summary": "Extract named structured fields"}},
+            "/v1/fusion": {"post": {"summary": "Run the full WebLoom Fusion pipeline"}},
+        },
+    })
 
 
 @app.post("/api/billing/checkout")
