@@ -18,8 +18,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt pytest
       - name: Compile Python
-        run: python -m py_compile web_app.py webloom_integrations.py spa_ripper/*.py
+        run: python -m py_compile web_app.py webloom_integrations.py fusion_client.py spa_ripper/*.py
       - name: Run tests
         env:
           PYTHONPATH: .
         run: pytest -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Validate MCP package
+        run: |
+          npm install --prefix mcp-server
+          node --check mcp-server/src/index.mjs
