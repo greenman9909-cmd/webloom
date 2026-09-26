@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#ffffff">
+<title>Docs · WebLoom</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0b1739;--muted:#66728e;--line:#e5eaf3;--blue:#3268ff;--violet:#6a4cff;--code:#0b1224}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,sans-serif;color:var(--ink);background:#fff}a{text-decoration:none;color:inherit}
+header{height:68px;border-bottom:1px solid var(--line);display:flex;align-items:center;position:sticky;top:0;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);z-index:20}.top{width:min(1280px,calc(100% - 36px));margin:auto;display:flex;align-items:center;justify-content:space-between;gap:20px}.brand{font:800 20px "Plus Jakarta Sans";letter-spacing:-.04em;display:flex;gap:10px;align-items:center}.mark{width:28px;height:28px;border-radius:9px;background:linear-gradient(135deg,var(--blue),var(--violet));box-shadow:0 8px 20px rgba(72,83,255,.2)}.topnav{display:flex;gap:18px;align-items:center;font-size:13px;font-weight:700;color:#52607a}.btn{padding:9px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}.layout{width:min(1280px,calc(100% - 36px));margin:auto;display:grid;grid-template-columns:220px minmax(0,760px) 1fr;gap:40px}.side{position:sticky;top:88px;height:max-content;padding:28px 0}.side b{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#98a2b5;margin:0 0 9px}.side a{display:block;padding:9px 11px;border-radius:9px;font-size:12px;font-weight:650;color:#60708b;margin:2px 0}.side a.active,.side a:hover{background:#f1f5ff;color:#365edc}.doc{padding:52px 0 90px;min-width:0}.kicker{display:inline-flex;padding:6px 9px;border-radius:999px;background:#eef3ff;color:#3c61d9;font-size:10px;font-weight:800}.doc h1{font:800 clamp(36px,5vw,55px)/1.02 "Plus Jakarta Sans";letter-spacing:-.055em;margin:14px 0}.lead{font-size:16px;line-height:1.65;color:var(--muted);max-width:680px}.doc h2{font:800 25px "Plus Jakarta Sans";letter-spacing:-.035em;margin:42px 0 10px}.doc h3{font:800 16px "Plus Jakarta Sans";margin:26px 0 8px}.doc p,.doc li{font-size:13px;line-height:1.7;color:#596782}.callout{padding:16px;border:1px solid #dfe6f4;border-radius:14px;background:#f9fbff;margin:18px 0}.endpoint{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:13px;padding:13px 14px;margin:9px 0}.method{font:800 9px Inter;color:#fff;background:#355ff0;border-radius:6px;padding:5px 7px}.endpoint code{font:600 12px ui-monospace,SFMono-Regular,Menlo,monospace}.endpoint span:last-child{margin-left:auto;font-size:11px;color:#7a879f}.code{position:relative;background:var(--code);color:#dce5f8;border-radius:15px;padding:18px;overflow:auto;font:11px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.tile{border:1px solid var(--line);border-radius:15px;padding:17px}.tile b{display:block;font-size:13px;margin-bottom:5px}.tile span{font-size:11px;line-height:1.55;color:#71809a}.toc{padding-top:52px}.toc .box{position:sticky;top:90px;border-left:1px solid var(--line);padding-left:18px}.toc b{font-size:11px}.toc a{display:block;font-size:11px;color:#7a879c;margin:10px 0}
+@media(max-width:980px){.layout{grid-template-columns:180px 1fr}.toc{display:none}}@media(max-width:700px){.layout{display:block}.side{position:relative;top:auto;display:flex;gap:6px;overflow:auto;padding:14px 0}.side b{display:none}.side a{white-space:nowrap}.doc{padding-top:24px}.grid{grid-template-columns:1fr}.topnav a:not(.btn){display:none}}
+</style>
+</head>
+<body>
+<header><div class="top"><a class="brand" href="/"><span class="mark"></span>WebLoom</a><nav class="topnav"><a href="/pricing">Pricing</a><a href="/api-keys">API keys</a><a class="btn" href="/new">Open app →</a></nav></div></header>
+<div class="layout">
+<aside class="side"><b>Documentation</b><a class="{{ 'active' if section == 'start' else '' }}" href="/docs">Get started</a><a class="{{ 'active' if section == 'api' else '' }}" href="/docs/api">API reference</a><a class="{{ 'active' if section == 'mcp' else '' }}" href="/docs/mcp">MCP server</a></aside>
+<main class="doc">
+{% if section == 'start' %}
+<span class="kicker">WebLoom Docs</span><h1>Public web data and frontend reconstruction, one API.</h1>
+<p class="lead">WebLoom combines a reconstructed frontend capture with Fusion data outputs: clean Markdown, structured entities, link graphs, change fingerprints and passive technical metadata.</p>
+<div class="grid"><div class="tile"><b>Clone</b><span>Capture reachable public frontend files into a previewable project and ZIP.</span></div><div class="tile"><b>Scrape</b><span>Turn one public page into clean Markdown, metadata and structured entities.</span></div><div class="tile"><b>Crawl</b><span>Follow public internal pages and return an AI-ready page dataset.</span></div><div class="tile"><b>Fusion</b><span>Run crawl + graph + change tracking + passive frontend analysis together.</span></div></div>
+<h2 id="quickstart">Quick start</h2><p>Create an API key from <a href="/api-keys"><b>API keys</b></a>, then send it as a Bearer token.</p>
+<div class="code">curl -X POST https://YOUR_WEBLOOM_DOMAIN/v1/scrape \
+  -H "Authorization: Bearer wl_YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'</div>
+<div class="callout"><b>Public web only.</b><p>WebLoom does not bypass authentication, CAPTCHA, paywalls, DRM or private network boundaries.</p></div>
+<h2 id="outputs">Capture outputs</h2><p>Completed projects can contain <code>webloom-project.json</code>, <code>metadata.json</code>, <code>links.json</code>, <code>sitemap.xml</code>, <code>fusion.json</code>, <code>dataset.jsonl</code>, <code>knowledge_base.md</code>, <code>graph.json</code>, <code>audit.json</code>, plus the reconstructed frontend files.</p>
+{% elif section == 'api' %}
+<span class="kicker">API Reference</span><h1>Five endpoints. One consistent web-data surface.</h1><p class="lead">Authenticate using <code>Authorization: Bearer wl_...</code>. Scrape and Map are lightweight; Crawl, Extract and Fusion are Pro operations.</p>
+<h2 id="endpoints">Endpoints</h2>
+<div class="endpoint"><span class="method">POST</span><code>/v1/scrape</code><span>One page → Markdown + entities</span></div>
+<div class="endpoint"><span class="method">POST</span><code>/v1/map</code><span>Discover URLs</span></div>
+<div class="endpoint"><span class="method">POST</span><code>/v1/crawl</code><span>Multi-page dataset</span></div>
+<div class="endpoint"><span class="method">POST</span><code>/v1/extract</code><span>Named structured fields</span></div>
+<div class="endpoint"><span class="method">POST</span><code>/v1/fusion</code><span>Full graph + data + audit</span></div>
+<h2 id="scrape">Scrape</h2><div class="code">{
+  "url": "https://example.com"
+}</div><p>Returns clean Markdown, metadata/entities, link sets, change fingerprint and passive page audit information.</p>
+<h2 id="crawl">Crawl</h2><div class="code">{
+  "url": "https://example.com",
+  "limit": 50,
+  "max_depth": 2
+}</div>
+<h2 id="extract">Extract</h2><div class="code">{
+  "url": "https://example.com",
+  "fields": ["title", "description", "author", "canonical"],
+  "limit": 20
+}</div>
+<h2 id="fusion">Fusion</h2><div class="code">{
+  "url": "https://example.com",
+  "limit": 50,
+  "max_depth": 2
+}</div><p>Returns the Fusion manifest, page records and downloadable artifact contents. Public client-side audit findings redact credential-like values.</p>
+<h2 id="openapi">OpenAPI</h2><p>The machine-readable specification is available at <code>/v1/openapi.json</code>.</p>
+{% else %}
+<span class="kicker">MCP</span><h1>Give AI agents WebLoom tools directly.</h1><p class="lead">The WebLoom MCP server exposes scrape, map, crawl, extract and fusion as read-only public-web tools backed by your WebLoom API key.</p>
+<h2 id="install">Install from this repository</h2><div class="code">cd mcp-server
+npm install</div>
+<h2 id="config">Client configuration</h2><div class="code">{
+  "mcpServers": {
+    "webloom": {
+      "command": "node",
+      "args": ["/absolute/path/to/webloom/mcp-server/src/index.mjs"],
+      "env": {
+        "WEBLOOM_API_URL": "https://YOUR_WEBLOOM_DOMAIN",
+        "WEBLOOM_API_KEY": "wl_YOUR_KEY"
+      }
+    }
+  }
+}</div>
+<h2 id="tools">Tools</h2><div class="grid"><div class="tile"><b>webloom_scrape</b><span>Scrape one known public URL.</span></div><div class="tile"><b>webloom_map</b><span>Discover URLs before deciding what to crawl.</span></div><div class="tile"><b>webloom_crawl</b><span>Collect clean content across a site.</span></div><div class="tile"><b>webloom_extract</b><span>Extract named metadata/schema fields.</span></div><div class="tile"><b>webloom_fusion</b><span>Return the complete Fusion dataset and graph.</span></div></div>
+<div class="callout"><b>Safety boundary.</b><p>The MCP server is designed for public-web reading and extraction. It does not provide login bypass, CAPTCHA bypass or authenticated exploitation.</p></div>
+{% endif %}
+</main>
+<aside class="toc"><div class="box"><b>On this page</b>{% if section == 'start' %}<a href="#quickstart">Quick start</a><a href="#outputs">Outputs</a>{% elif section == 'api' %}<a href="#endpoints">Endpoints</a><a href="#scrape">Scrape</a><a href="#crawl">Crawl</a><a href="#extract">Extract</a><a href="#fusion">Fusion</a><a href="#openapi">OpenAPI</a>{% else %}<a href="#install">Install</a><a href="#config">Configure</a><a href="#tools">Tools</a>{% endif %}</div></aside>
+</div>
+</body></html>
