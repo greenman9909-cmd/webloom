@@ -53,7 +53,19 @@ document.querySelectorAll('.reveal').forEach(el=>io?io.observe(el):el.classList.
       }
       const u=d.user||{};
       $$(".plan-chip b").forEach(el=>el.textContent=u.role==="owner"?"Owner access":u.plan==="pro"?"Pro plan":"Free plan");
-      $$(".plan-chip p").forEach(el=>el.textContent=u.role==="owner"?"Unlimited captures + private tools.":u.plan==="pro"?"Unlimited captures enabled.":u.free_capture_used?"Free capture used.":"One complete capture included.");
+      $(".plan-chip p").forEach(el=>el.textContent=u.role==="owner"?"Unlimited captures + private tools.":u.plan==="pro"?"Unlimited captures enabled.":u.free_capture_used?"Free capture used.":"One complete capture included.");
+      $(".plan-chip .btn").forEach(el=>{
+        if(u.role==="owner"){
+          el.textContent="Unlimited active";
+          el.removeAttribute("href");
+          el.classList.add("owner-active");
+          el.setAttribute("aria-disabled","true");
+        }else if(u.plan==="pro" && ["active","trialing"].includes(u.subscription_status)){
+          el.textContent="Manage Pro";
+          el.href="/billing";
+          el.classList.remove("owner-active");
+        }
+      });
       $$(".avatar").forEach(el=>{
         const email=(u.email||"WL").trim();
         el.textContent=(email.slice(0,2)||"WL").toUpperCase();
