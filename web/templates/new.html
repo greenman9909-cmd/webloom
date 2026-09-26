@@ -1,157 +1,424 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#ffffff"><meta name="robots" content="noindex,nofollow"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/__spa_ui/static/webloom-app.css"><title>New capture · WebLoom</title></head><body><div class="shell"><aside class="sidebar"><a class="brand" href="/"><span class="brand-mark"></span><span>WebLoom</span></a><div class="nav-label">Workspace</div><nav class="side-nav">
-<a class="" href="/dashboard"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>Overview</a>
-<a class="active" href="/new"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New capture</a>
-<a class="" href="/project"><svg viewBox="0 0 24 24"><path d="M4 6h6l2 2h8v10H4z"/></svg>Projects</a></nav>
-<div class="nav-label">Account</div><nav class="side-nav">
-<a class="" href="/billing"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4zM4 10h16"/></svg>Billing</a>
-<a class="" href="/settings"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 12h2m12 0h2M12 4v2m0 12v2"/></svg>Settings</a>
-<a class="" href="/account"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0"/></svg>Account</a></nav>
-<div class="side-foot"><div class="plan-chip"><b>Free plan</b><p>One complete capture included.</p><a class="btn primary full" href="/billing">Upgrade to Pro</a></div></div></aside><main class="main"><header class="topbar"><div class="topbar-left"><button class="btn mobile-menu" data-menu aria-label="Open navigation"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><span class="page-title">New capture</span></div><div class="top-actions"><a class="btn hide-mobile" href="/">View site</a><a class="avatar" href="/account">WL</a></div></header><div class="content">
-<div class="hero-row reveal"><div><h1>Capture a public website</h1><p>One URL in. A mapped, explorable project out.</p></div></div>
-<section class="capture-box reveal"><span class="badge">Capture · Preview · Export</span><h2 style="margin-top:14px">Start with the site you want to understand.</h2><p>Paste a publicly accessible URL. WebLoom will organize discoverable pages, assets, links and metadata into one workspace.</p>
-<div class="urlbar"><label class="url-input"><svg viewBox="0 0 24 24"><path d="M10.5 13.5a4 4 0 0 0 5.7 0l2.3-2.3a4 4 0 0 0-5.7-5.7l-1.3 1.3M13.5 10.5a4 4 0 0 0-5.7 0l-2.3 2.3a4 4 0 0 0 5.7 5.7l1.3-1.3"/></svg><input id="captureUrl" placeholder="example.com" aria-label="Public website URL"></label><button id="startCapture" class="btn primary" type="button">Start capture →</button></div>
-<div class="helper-row"><span><i class="helper-dot">✓</i>Public pages only</span><span><i class="helper-dot">✓</i>Live preview</span><span><i class="helper-dot">✓</i>ZIP export</span></div>
-<div class="capture-error" id="captureError" hidden role="alert"></div>
-<div class="capture-progress" id="captureProgress" hidden>
-  <div class="capture-progress-bar"><i id="captureProgressBar"></i></div>
-  <div class="capture-progress-copy"><b id="captureProgressTitle">Connecting to the site…</b><span id="captureProgressMeta">Checking the public entry page.</span></div>
-</div></section>
-<section class="card live-capture-result" id="liveCaptureResult" hidden>
-  <div class="live-capture-head">
-    <div><span class="badge">Live preview</span><h2 id="liveCaptureTitle">Captured site</h2><p id="liveCaptureMeta">Your capture is ready inside WebLoom.</p></div>
-    <div class="project-actions"><a class="btn" id="liveProjectLink" href="#">Project details</a><a class="btn primary" id="liveDownloadLink" href="#">Download ZIP ↓</a></div>
-  </div>
-  <div class="preview-toolbar"><span id="livePreviewStatus">Sandboxed reconstructed frontend</span><button class="btn" id="reloadLivePreview" type="button">Reload</button></div>
-  <iframe id="liveCaptureFrame" class="project-preview-frame" title="Live WebLoom capture preview" sandbox="allow-scripts allow-forms allow-popups allow-downloads" referrerpolicy="no-referrer"></iframe>
-</section>
-<section class="card visual-grid reveal motion-surface" data-scrub style="margin-top:18px">
-<div class="visual-copy"><span class="badge">What happens next</span><h2 style="margin-top:12px">The capture builds itself in front of you.</h2><p>WebLoom maps reachable pages, pulls referenced frontend files into one workspace, then gives you a live preview before export.</p><div class="mini-points"><div class="mini-point"><span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="18" cy="17" r="2"/><path d="M8 11 16 8M8 13l8 3"/></svg></span><span>Map internal links and reachable routes.</span></div><div class="mini-point"><span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 8h17M8 13s1.7-2 4-2 4 2 4 2-1.7 2-4 2-4-2-4-2Z"/><circle cx="12" cy="13" r="1"/></svg></span><span>Open the rebuilt frontend in a live preview.</span></div><div class="mini-point"><span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 7h14v12H5zM8 4h8v3"/><path d="M12 10v5M9.5 12.5 12 15l2.5-2.5"/></svg></span><span>Export the organized project when it looks right.</span></div></div></div>
-<div class="stage-card" data-depth="1.15"><div class="stage-toolbar"><span class="stage-dots"><i></i><i></i><i></i></span><span class="stage-url">public-site.example</span><span class="stage-status">Mapping</span></div><div class="stage-body"><div class="stage-browser"><div class="stage-browser-bar"></div><div class="stage-browser-page"></div></div><div class="stage-file-panel"><div class="stage-file"><i></i>pages /</div><div class="stage-file"><i></i>assets /</div><div class="stage-file"><i></i>metadata.json</div><div class="stage-file"><i></i>sitemap.xml</div></div><div class="stage-scan"></div><span class="stage-node a"></span><span class="stage-node b"></span><span class="stage-node c"></span><span class="stage-line a"></span><span class="stage-line b"></span><span class="stage-float one">Routes found</span><span class="stage-float two">Preview building</span></div></div>
-</section></div></main></div><script src="/__spa_ui/static/webloom-app.js"></script><script>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f7f8fc">
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/__spa_ui/static/webloom-app.css">
+  <title>Capture Studio · WebLoom</title>
+</head>
+<body class="capture-studio-page">
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="/"><span class="brand-mark"></span><span>WebLoom</span></a>
+    <div class="nav-label">Workspace</div>
+    <nav class="side-nav">
+      <a href="/dashboard"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>Overview</a>
+      <a class="active" href="/new"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Capture Studio</a>
+      <a href="/project"><svg viewBox="0 0 24 24"><path d="M4 6h6l2 2h8v10H4z"/></svg>Projects</a>
+    </nav>
+    <div class="nav-label">Developer</div>
+    <nav class="side-nav">
+      <a href="/docs/api"><svg viewBox="0 0 24 24"><path d="M7 5 3 12l4 7M17 5l4 7-4 7M14 4l-4 16"/></svg>API docs</a>
+      <a href="/api-keys"><svg viewBox="0 0 24 24"><path d="M14 7a5 5 0 1 0-3 4.6L14 15h3v3h3v-5l-4-4"/></svg>API keys</a>
+      <a href="/docs/mcp"><svg viewBox="0 0 24 24"><path d="M7 7h10v10H7zM3 12h4m10 0h4M12 3v4m0 10v4"/></svg>MCP</a>
+    </nav>
+    <div class="nav-label">Account</div>
+    <nav class="side-nav">
+      <a href="/billing"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4zM4 10h16"/></svg>Billing</a>
+      <a href="/settings"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 12h2m12 0h2M12 4v2m0 12v2"/></svg>Settings</a>
+      <a href="/account"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0"/></svg>Account</a>
+    </nav>
+    <div class="side-foot">
+      <div class="plan-chip">
+        <b>Free plan</b>
+        <p>One complete capture included.</p>
+        <a class="btn primary full" href="/billing">Upgrade to Pro</a>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="btn mobile-menu" data-menu aria-label="Open navigation"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+        <span class="page-title">Capture Studio</span>
+      </div>
+      <div class="top-actions">
+        <a class="btn hide-mobile" href="/docs">Docs</a>
+        <a class="avatar" href="/account">WL</a>
+      </div>
+    </header>
+
+    <div class="content capture-studio-content">
+      <section class="capture-studio-hero">
+        <div>
+          <div class="studio-eyebrow"><span class="live-dot"></span>Live capture engine</div>
+          <h1>Watch a website turn into a project.</h1>
+          <p>Real files. Real routes. Real bytes. The preview comes alive while WebLoom is still capturing.</p>
+        </div>
+        <div class="studio-hero-badges">
+          <span>Public web only</span><span>Fusion connected</span><span>Live preview</span>
+        </div>
+      </section>
+
+      <section class="capture-command-card">
+        <div class="capture-command-label">
+          <span>Target URL</span>
+          <small>No fake timer — activity below comes from the scraper.</small>
+        </div>
+        <div class="capture-command">
+          <div class="capture-url-field">
+            <svg viewBox="0 0 24 24"><path d="M10.5 13.5a4 4 0 0 0 5.7 0l2.3-2.3a4 4 0 0 0-5.7-5.7l-1.3 1.3M13.5 10.5a4 4 0 0 0-5.7 0l-2.3 2.3a4 4 0 0 0 5.7 5.7l1.3-1.3"/></svg>
+            <input id="captureUrl" placeholder="https://example.com" autocomplete="url" spellcheck="false" aria-label="Public website URL">
+          </div>
+          <button id="startCapture" class="studio-run-button" type="button"><span class="run-orb"></span><span id="runButtonText">Capture site</span><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
+        </div>
+        <div id="captureError" class="capture-error" hidden role="alert"></div>
+      </section>
+
+      <section id="captureSession" class="capture-session" hidden>
+        <div class="capture-session-head">
+          <div class="session-target">
+            <span class="session-favicon" id="sessionFavicon">W</span>
+            <div><b id="sessionHost">Waiting for target</b><span id="sessionUrl">—</span></div>
+          </div>
+          <div class="session-head-actions">
+            <span class="session-status" id="sessionStatus"><i></i><span>Queued</span></span>
+            <a id="sessionProjectLink" class="btn" href="#" hidden>Project</a>
+            <a id="sessionDownloadLink" class="btn primary" href="#" hidden>Download ZIP</a>
+          </div>
+        </div>
+
+        <div class="capture-stage-rail" id="stageRail">
+          <div class="capture-stage active" data-phase="connecting"><i>1</i><span>Connect</span></div>
+          <div class="capture-stage" data-phase="capturing"><i>2</i><span>Capture</span></div>
+          <div class="capture-stage" data-phase="indexing"><i>3</i><span>Index</span></div>
+          <div class="capture-stage" data-phase="fusion"><i>4</i><span>Fusion</span></div>
+          <div class="capture-stage" data-phase="uploading"><i>5</i><span>Publish</span></div>
+          <div class="capture-stage" data-phase="done"><i>6</i><span>Ready</span></div>
+        </div>
+
+        <div class="capture-live-grid">
+          <section class="capture-live-panel capture-feed-panel">
+            <div class="panel-cap">
+              <div><span class="panel-kicker">LIVE ACTIVITY</span><b id="phaseLabel">Starting capture worker…</b></div>
+              <span class="signal-bars"><i></i><i></i><i></i><i></i></span>
+            </div>
+
+            <div class="capture-metrics">
+              <div><small>FILES</small><strong id="metricFiles">0</strong></div>
+              <div><small>DATA</small><strong id="metricBytes">0 B</strong></div>
+              <div><small>QUEUED</small><strong id="metricQueued">0</strong></div>
+              <div><small>SKIPPED</small><strong id="metricFailed">0</strong></div>
+            </div>
+
+            <div class="capture-activity" id="captureActivity" aria-live="polite">
+              <div class="activity-row system"><span class="activity-icon">●</span><div><b>Capture session ready</b><small>Waiting for the worker stream.</small></div><time>now</time></div>
+            </div>
+
+            <div class="activity-foot">
+              <span><i class="activity-pulse"></i><span id="streamState">Opening live stream…</span></span>
+              <span id="activityCount">0 events</span>
+            </div>
+          </section>
+
+          <section class="capture-live-panel preview-live-panel">
+            <div class="browser-chrome">
+              <div class="browser-dots"><i></i><i></i><i></i></div>
+              <div class="browser-address"><span class="lock-dot"></span><span id="previewAddress">preview.webloom.local</span></div>
+              <button id="reloadPreview" class="browser-reload" type="button" title="Reload preview"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2 5.3M20 4v7h-7"/></svg></button>
+            </div>
+            <div class="live-preview-stage">
+              <iframe id="liveCaptureFrame" title="Live reconstructed website preview" sandbox="allow-scripts allow-forms allow-popups allow-downloads" referrerpolicy="no-referrer"></iframe>
+              <div id="previewWaiting" class="preview-waiting">
+                <div class="preview-radar">
+                  <span class="radar-ring one"></span><span class="radar-ring two"></span><span class="radar-ring three"></span>
+                  <span class="radar-core"></span>
+                </div>
+                <b id="previewWaitingTitle">Waiting for index.html</b>
+                <p id="previewWaitingCopy">The browser will wake up as soon as WebLoom publishes the captured shell.</p>
+                <div class="preview-file-stream" id="previewFileStream"><span></span><span></span><span></span></div>
+              </div>
+            </div>
+            <div class="preview-status-bar">
+              <span><i class="preview-live-dot"></i><span id="previewStatusText">Preview offline</span></span>
+              <span id="previewRefreshText">0 published assets</span>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="capturePrimer" class="capture-primer">
+        <article><span class="primer-number">01</span><div><b>Capture becomes visible.</b><p>Every downloaded file appears in the activity stream with its real path and size.</p></div></article>
+        <article><span class="primer-number">02</span><div><b>Preview before packaging.</b><p>The iframe starts from the published shell while CSS, JavaScript and media continue arriving.</p></div></article>
+        <article><span class="primer-number">03</span><div><b>Fusion finishes the project.</b><p>Markdown, graph, entities, audit and ZIP export land in the same workspace.</p></div></article>
+      </section>
+    </div>
+  </main>
+</div>
+
+<script src="/__spa_ui/static/webloom-app.js"></script>
+<script>
+(() => {
+  const $ = s => document.querySelector(s);
+  const field = $("#captureUrl");
+  const button = $("#startCapture");
+  const buttonText = $("#runButtonText");
+  const session = $("#captureSession");
+  const primer = $("#capturePrimer");
+  const errorBox = $("#captureError");
+  const frame = $("#liveCaptureFrame");
+  const waiting = $("#previewWaiting");
+  const activity = $("#captureActivity");
   const params = new URLSearchParams(location.search);
-  const field = document.getElementById("captureUrl");
-  if (field && params.get("url")) field.value = params.get("url");
-  document.getElementById("startCapture")?.addEventListener("click", async () => {
-    const value = field?.value.trim();
-    if (!value) { field?.focus(); return; }
-    const button = document.getElementById("startCapture");
-    const original = button.textContent;
-    button.disabled = true;
-    button.textContent = "Capturing…";
-    const progress = document.getElementById("captureProgress");
-    const progressBar = document.getElementById("captureProgressBar");
-    const progressTitle = document.getElementById("captureProgressTitle");
-    const progressMeta = document.getElementById("captureProgressMeta");
-    const stages = [
-      ["Connecting to the site…","Checking the public entry page."],
-      ["Mapping the frontend…","Following reachable routes and references."],
-      ["Collecting files…","Saving pages, assets, links and metadata."],
-      ["Packaging the project…","Preparing preview and export files."]
-    ];
-    let stage = 0;
-    let timer = null;
-    if (progress) {
-      progress.hidden = false;
-      progressBar.style.width = "12%";
-      timer = setInterval(() => {
-        stage = Math.min(stages.length - 1, stage + 1);
-        progressTitle.textContent = stages[stage][0];
-        progressMeta.textContent = stages[stage][1];
-        progressBar.style.width = [12,38,68,88][stage] + "%";
-      }, 4200);
+  if (params.get("url")) field.value = params.get("url");
+
+  let currentJob = null;
+  let activityEvents = 0;
+  let publishedAssets = 0;
+  let lastPreviewRefresh = 0;
+  const phaseOrder = ["connecting","capturing","indexing","fusion","packaging","uploading","done"];
+
+  const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));
+  const bytes = n => {
+    n = Number(n || 0);
+    if (n < 1024) return n + " B";
+    if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+    if (n < 1073741824) return (n / 1048576).toFixed(1) + " MB";
+    return (n / 1073741824).toFixed(2) + " GB";
+  };
+  const hostOf = raw => {
+    try { return new URL(/^https?:\/\//i.test(raw) ? raw : "https://" + raw).hostname; }
+    catch { return raw; }
+  };
+
+  function setPhase(phase, label) {
+    const normalized = phase === "packaging" ? "uploading" : phase;
+    const currentIndex = phaseOrder.indexOf(phase);
+    document.querySelectorAll(".capture-stage").forEach(stage => {
+      const stagePhase = stage.dataset.phase;
+      const stageIndex = phaseOrder.indexOf(stagePhase);
+      stage.classList.toggle("active", stagePhase === normalized);
+      stage.classList.toggle("complete", currentIndex > stageIndex || phase === "done");
+    });
+    const status = $("#sessionStatus");
+    status.className = "session-status " + (phase === "done" ? "ready" : phase === "error" ? "failed" : "working");
+    status.querySelector("span").textContent = phase === "done" ? "Ready" : phase === "error" ? "Failed" : (label || phase || "Working");
+    if (label) $("#phaseLabel").textContent = label;
+  }
+
+  function updateMetrics(event) {
+    if (event.processed_count != null) $("#metricFiles").textContent = event.processed_count;
+    if (event.total_bytes != null) $("#metricBytes").textContent = bytes(event.total_bytes);
+    if (event.queued_count != null) $("#metricQueued").textContent = event.queued_count;
+    if (event.failed_count != null) $("#metricFailed").textContent = event.failed_count;
+    if (event.files != null) $("#metricFiles").textContent = event.files;
+    if (event.bytes != null) $("#metricBytes").textContent = bytes(event.bytes);
+    if (event.failed != null) $("#metricFailed").textContent = event.failed;
+  }
+
+  function addActivity(title, detail, kind = "asset") {
+    activityEvents += 1;
+    $("#activityCount").textContent = activityEvents + (activityEvents === 1 ? " event" : " events");
+    const row = document.createElement("div");
+    row.className = "activity-row " + kind;
+    const icon = kind === "fail" ? "×" : kind === "phase" ? "◆" : kind === "system" ? "●" : "↳";
+    row.innerHTML = '<span class="activity-icon">'+icon+'</span><div><b>'+esc(title)+'</b><small>'+esc(detail || "")+'</small></div><time>now</time>';
+    activity.prepend(row);
+    while (activity.children.length > 14) activity.lastElementChild.remove();
+  }
+
+  function refreshPreview(force = false) {
+    if (!currentJob) return;
+    const now = Date.now();
+    if (!force && now - lastPreviewRefresh < 3500) return;
+    lastPreviewRefresh = now;
+    frame.src = "/preview/" + encodeURIComponent(currentJob.id) + "/?live=" + now;
+  }
+
+  function activatePreview(host) {
+    waiting.classList.add("is-hidden");
+    frame.classList.add("is-live");
+    $("#previewAddress").textContent = host;
+    $("#previewStatusText").textContent = "Live reconstructed preview";
+    refreshPreview(true);
+  }
+
+  function handleEvent(event) {
+    updateMetrics(event);
+    if (event.phase) setPhase(event.phase, event.label);
+
+    if (event.event === "phase") {
+      addActivity(event.label || event.phase, "Pipeline stage changed.", "phase");
+      return;
     }
+
+    if (event.event === "scrape") {
+      const type = event.event;
+      if (event.preview_ready) {
+        publishedAssets += 1;
+        $("#previewRefreshText").textContent = publishedAssets + " published asset";
+        addActivity("index.html published", "Live preview is starting.", "system");
+        activatePreview(hostOf(currentJob.url));
+        return;
+      }
+      if (event.path) {
+        if (event.published) publishedAssets += 1;
+        $("#previewRefreshText").textContent = publishedAssets + " published assets";
+        const label = event.path;
+        const detail = bytes(event.bytes || 0) + (event.published ? " · published" : "");
+        addActivity(label, detail, event.publish_error ? "fail" : "asset");
+        if (frame.classList.contains("is-live") && publishedAssets % 12 === 0) refreshPreview();
+      } else if (event.reason) {
+        addActivity(event.url || "Skipped resource", event.reason, "fail");
+      }
+      return;
+    }
+
+    if (event.event === "heartbeat") {
+      $("#streamState").textContent = "Live stream connected";
+      return;
+    }
+
+    if (event.event === "complete") {
+      currentJob = event.job || currentJob;
+      setPhase("done", "Capture ready");
+      $("#streamState").textContent = "Capture complete";
+      addActivity("Project ready", (currentJob.files || 0) + " files · " + bytes(currentJob.bytes || 0), "system");
+      $("#sessionProjectLink").href = "/project/" + currentJob.id;
+      $("#sessionProjectLink").hidden = false;
+      $("#sessionDownloadLink").href = currentJob.download_url || ("/api/jobs/" + encodeURIComponent(currentJob.id) + "/download");
+      $("#sessionDownloadLink").hidden = false;
+      activatePreview(hostOf(currentJob.url));
+      button.disabled = false;
+      buttonText.textContent = "Capture another";
+      return;
+    }
+
+    if (event.event === "error") {
+      setPhase("error", "Capture failed");
+      $("#streamState").textContent = "Stream stopped";
+      addActivity("Capture failed", event.error || "Unknown error", "fail");
+      errorBox.hidden = false;
+      errorBox.textContent = event.error || "Capture failed.";
+      button.disabled = false;
+      buttonText.textContent = "Try again";
+    }
+  }
+
+  async function streamCapture(streamUrl) {
+    const response = await fetch(streamUrl, {
+      headers: {"Accept":"text/event-stream"},
+      credentials: "same-origin",
+      cache: "no-store"
+    });
+    if (!response.ok || !response.body) throw new Error("The live capture stream could not be opened.");
+
+    $("#streamState").textContent = "Live stream connected";
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const {value, done} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream:true});
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() || "";
+      for (const frameText of frames) {
+        const line = frameText.split("\n").find(line => line.startsWith("data: "));
+        if (!line) continue;
+        try { handleEvent(JSON.parse(line.slice(6))); } catch {}
+      }
+    }
+  }
+
+  async function startCapture() {
+    const value = field.value.trim();
+    if (!value) { field.focus(); return; }
+
+    errorBox.hidden = true;
+    errorBox.textContent = "";
+    button.disabled = true;
+    buttonText.textContent = "Starting…";
+    activityEvents = 0;
+    publishedAssets = 0;
+    lastPreviewRefresh = 0;
+    activity.innerHTML = "";
+    frame.removeAttribute("src");
+    frame.classList.remove("is-live");
+    waiting.classList.remove("is-hidden");
+    $("#previewWaitingTitle").textContent = "Waiting for index.html";
+    $("#previewWaitingCopy").textContent = "The browser will wake up as soon as WebLoom publishes the captured shell.";
+    $("#previewStatusText").textContent = "Preview offline";
+    $("#previewRefreshText").textContent = "0 published assets";
+    $("#metricFiles").textContent = "0";
+    $("#metricBytes").textContent = "0 B";
+    $("#metricQueued").textContent = "0";
+    $("#metricFailed").textContent = "0";
+    $("#sessionProjectLink").hidden = true;
+    $("#sessionDownloadLink").hidden = true;
+
+    session.hidden = false;
+    primer.hidden = true;
+    session.scrollIntoView({behavior:"smooth", block:"start"});
+    setPhase("connecting", "Creating capture session");
+
     try {
-      const errorBox = document.getElementById("captureError");
-      if (errorBox) { errorBox.hidden = true; errorBox.textContent = ""; }
-      const response = await fetch("/api/clone", {
+      const response = await fetch("/api/clone/start", {
         method: "POST",
         headers: {"Content-Type":"application/json","Accept":"application/json"},
         credentials: "same-origin",
         body: JSON.stringify({url:value})
       });
-      const raw = await response.text();
-      let data = {};
-      if (raw) {
-        try { data = JSON.parse(raw); }
-        catch {
-          throw new Error(response.ok
-            ? "The capture service returned an invalid response."
-            : "This deployment is not connected to the WebLoom capture backend.");
-        }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.job?.id) {
+        const error = new Error(data.error || "Capture could not be started.");
+        error.upgradeRequired = !!data.upgrade_required;
+        throw error;
       }
-      if (!response.ok || !data?.job?.id) {
-        const err = new Error(data?.error || data?.job?.error || "Capture could not be started.");
-        err.upgradeRequired = !!data?.upgrade_required;
-        throw err;
-      }
-      const showInlinePreview = job => {
-        const result = document.getElementById("liveCaptureResult");
-        const frame = document.getElementById("liveCaptureFrame");
-        const title = document.getElementById("liveCaptureTitle");
-        const meta = document.getElementById("liveCaptureMeta");
-        const projectLink = document.getElementById("liveProjectLink");
-        const downloadLink = document.getElementById("liveDownloadLink");
-        let host = job.url || value;
-        try { host = new URL(job.url || (value.startsWith("http") ? value : "https://" + value)).hostname; } catch {}
-        if (title) title.textContent = host;
-        if (meta) meta.textContent = (job.files || 0) + " files · " + ((job.bytes || 0) / 1048576).toFixed(1) + " MB · " + (job.failed || 0) + " skipped";
-        if (projectLink) projectLink.href = "/project/" + job.id;
-        if (downloadLink) downloadLink.href = job.download_url || ("/api/jobs/" + encodeURIComponent(job.id) + "/download");
-        if (frame) frame.src = (job.preview_url || ("/preview/" + encodeURIComponent(job.id) + "/")) + "?embedded=1";
-        if (result) {
-          result.hidden = false;
-          result.scrollIntoView({behavior:"smooth",block:"start"});
-        }
-        document.getElementById("reloadLivePreview")?.addEventListener("click", () => {
-          if (frame) frame.src = "/preview/" + encodeURIComponent(job.id) + "/?r=" + Date.now();
-        }, {once:true});
-      };
 
-      const waitForCapture = async job => {
-        let current = job;
-        for (let attempt = 0; attempt < 160; attempt++) {
-          if (current.status === "done") return current;
-          if (current.status === "error") throw new Error(current.error || "Capture failed.");
-          if (progressTitle) progressTitle.textContent = current.status === "running" ? "Capturing the site…" : "Capture queued…";
-          if (progressMeta) progressMeta.textContent = "The preview will appear here automatically.";
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          const statusResponse = await fetch("/api/jobs/" + encodeURIComponent(current.id), {credentials:"same-origin",headers:{"Accept":"application/json"}});
-          const statusRaw = await statusResponse.text();
-          let statusData = {};
-          try { statusData = JSON.parse(statusRaw || "{}"); } catch {}
-          if (!statusResponse.ok || !statusData.job) throw new Error(statusData.error || "Could not read capture status.");
-          current = statusData.job;
-        }
-        throw new Error("Capture is taking longer than expected. It is saved in Projects.");
-      };
+      currentJob = data.job;
+      const host = hostOf(currentJob.url);
+      $("#sessionHost").textContent = host;
+      $("#sessionUrl").textContent = currentJob.url;
+      $("#sessionFavicon").textContent = (host[0] || "W").toUpperCase();
+      $("#previewAddress").textContent = host;
+      buttonText.textContent = "Capturing…";
+      addActivity("Session created", currentJob.id, "system");
 
-      clearInterval(timer);
-      const finishedJob = await waitForCapture(data.job);
-      if (progressBar) progressBar.style.width = "100%";
-      if (progressTitle) progressTitle.textContent = "Project ready.";
-      if (progressMeta) progressMeta.textContent = "Live preview loaded below — no redirect.";
-      showInlinePreview(finishedJob);
-      button.disabled = false;
-      button.textContent = "Capture another site";
+      await streamCapture(data.stream_url || ("/api/jobs/" + encodeURIComponent(currentJob.id) + "/stream"));
     } catch (error) {
-      clearInterval(timer);
-      button.disabled = false;
-      button.textContent = original;
-      if (progress) progress.hidden = true;
-      const errorBox = document.getElementById("captureError");
-      if (errorBox) {
-        errorBox.hidden = false;
-        errorBox.innerHTML = "";
-        const message = document.createElement("span");
-        message.textContent = error.message || "Capture could not be started.";
-        errorBox.appendChild(message);
-        if (error.upgradeRequired) {
-          const link = document.createElement("a");
-          link.href = "/billing";
-          link.textContent = "View Pro →";
-          errorBox.appendChild(link);
-        }
+      setPhase("error", "Capture interrupted");
+      $("#streamState").textContent = "Stream unavailable";
+      addActivity("Capture interrupted", error.message || "Unknown error", "fail");
+      errorBox.hidden = false;
+      errorBox.innerHTML = "";
+      const message = document.createElement("span");
+      message.textContent = error.message || "Capture could not be started.";
+      errorBox.appendChild(message);
+      if (error.upgradeRequired) {
+        const link = document.createElement("a");
+        link.href = "/billing";
+        link.textContent = "View Pro →";
+        errorBox.appendChild(link);
       }
+      button.disabled = false;
+      buttonText.textContent = "Try again";
     }
+  }
+
+  button.addEventListener("click", startCapture);
+  field.addEventListener("keydown", event => {
+    if (event.key === "Enter") startCapture();
   });
-  </script></body></html>
+  $("#reloadPreview").addEventListener("click", () => refreshPreview(true));
+})();
+</script>
+</body>
+</html>
