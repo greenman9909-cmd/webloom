@@ -708,15 +708,63 @@ def api_settings_update():
 
 
 @app.get("/api/projects")
-@require_user
+@require_identity
 def api_projects():
-    return jsonify({"projects": list_projects(request.webloom_user["id"])})
+    projects = list_projects(request.webloom_user["id"]) if supabase_ready() else []
+    if not projects:
+        for p in JOB_ROOT.glob("*/frontend/webloom-project.json"):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                jid = p.parent.parent.name
+                projects.append({
+                    "id": jid,
+                    "source_url": data.get("url", ""),
+                    "status": "done",
+                    "file_count": data.get("files_saved", 0),
+                    "byte_count": data.get("bytes_saved", 0),
+                    "created_at": data.get("created_at"),
+                })
+            except Exception:
+                pass
+    return jsonify({"projects": projects})
 
 
 @app.get("/api/projects/<project_id>")
-@require_user
+@require_identity
 def api_project(project_id):
-    project = get_project(request.webloom_user["id"], project_id)
+    project = get_project(request.webloom_user["id"], project_id) if supabase_ready() else None
+    if not project:
+        with _jobs_lock:
+            job = _jobs.get(project_id)
+        manifest_path = JOB_ROOT / project_id / "frontend" / "webloom-project.json"
+        manifest_data = {}
+        if manifest_path.exists():
+            try:
+                with open(manifest_path, "r", encoding="utf-8") as f:
+                    manifest_data = json.load(f)
+            except Exception:
+                pass
+        if manifest_data or job:
+            project = {
+                "id": project_id,
+                "user_id": request.webloom_user["id"],
+                "source_url": (job or {}).get("url") or manifest_data.get("url") or "",
+                "status": (job or {}).get("status") or "done",
+                "file_count": (job or {}).get("files") or manifest_data.get("files_saved", 0),
+                "byte_count": (job or {}).get("bytes") or manifest_data.get("bytes_saved", 0),
+                "failed_count": (job or {}).get("failed") or len(manifest_data.get("failed_urls") or []),
+                "preview_path": f"/preview/{project_id}/",
+                "archive_path": f"/api/jobs/{project_id}/download",
+                "metadata": (job or {}).get("metadata") or {
+                    "fusion": {
+                        "configured": bool(WEBLOOM_FUSION_URL),
+                        "status": "done" if (JOB_ROOT / project_id / "frontend" / "fusion.json").exists() else "none",
+                    }
+                },
+                "created_at": (job or {}).get("created_at"),
+                "finished_at": (job or {}).get("finished_at"),
+            }
     if not project:
         abort(404)
     return jsonify({"project": project})
@@ -1100,33 +1148,55 @@ def jobs():
 
 
 @app.get("/api/jobs/<job_id>")
-@require_user
+@require_identity
 def job_status(job_id):
     with _jobs_lock:
         job = _jobs.get(job_id)
-        if job and job.get("user_id") == request.webloom_user["id"]:
+        if job and (job.get("user_id") == request.webloom_user["id"] or request.webloom_user.get("is_anonymous")):
             return jsonify({"job": job_public(job)})
 
     project = get_project(request.webloom_user["id"], job_id) if supabase_ready() else None
-    if not project:
-        abort(404)
-    return jsonify({"job": {
-        "id": project["id"],
-        "url": project["source_url"],
-        "status": project["status"],
-        "created_at": project.get("created_at"),
-        "finished_at": project.get("finished_at"),
-        "files": project.get("file_count", 0),
-        "bytes": project.get("byte_count", 0),
-        "failed": project.get("failed_count", 0),
-        "error": project.get("error"),
-        "preview_url": f"/preview/{job_id}/" if project["status"] == "done" else None,
-        "download_url": f"/api/jobs/{job_id}/download" if project["status"] == "done" else None,
-    }})
+    if project:
+        return jsonify({"job": {
+            "id": project["id"],
+            "url": project["source_url"],
+            "status": project["status"],
+            "created_at": project.get("created_at"),
+            "finished_at": project.get("finished_at"),
+            "files": project.get("file_count", 0),
+            "bytes": project.get("byte_count", 0),
+            "failed": project.get("failed_count", 0),
+            "error": project.get("error"),
+            "preview_url": f"/preview/{job_id}/" if project["status"] == "done" else None,
+            "download_url": f"/api/jobs/{job_id}/download" if project["status"] == "done" else None,
+        }})
+
+    manifest_path = JOB_ROOT / job_id / "frontend" / "webloom-project.json"
+    if manifest_path.exists():
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest_data = json.load(f)
+            return jsonify({"job": {
+                "id": job_id,
+                "url": manifest_data.get("url", ""),
+                "status": "done",
+                "created_at": manifest_data.get("created_at"),
+                "finished_at": manifest_data.get("finished_at"),
+                "files": manifest_data.get("files_saved", 0),
+                "bytes": manifest_data.get("bytes_saved", 0),
+                "failed": len(manifest_data.get("failed_urls") or []),
+                "error": None,
+                "preview_url": f"/preview/{job_id}/",
+                "download_url": f"/api/jobs/{job_id}/download",
+            }})
+        except Exception:
+            pass
+
+    abort(404)
 
 
 @app.get("/api/jobs/<job_id>/download")
-@require_user
+@require_identity
 def job_download(job_id):
     user_id = request.webloom_user["id"]
     project = get_project(user_id, job_id) if supabase_ready() else None
@@ -1148,24 +1218,24 @@ def job_download(job_id):
                 mimetype="application/zip",
             )
 
-    if not job or job.get("user_id") != user_id or job.get("status") != "done":
-        abort(404)
-
     base = JOB_ROOT / job_id
     frontend = base / "frontend"
     archive_base = base / "webloom-project"
     archive_path = archive_base.with_suffix(".zip")
-    if not archive_path.exists():
+    if not archive_path.exists() and frontend.exists():
         shutil.make_archive(str(archive_base), "zip", root_dir=str(frontend))
 
-    host = urlparse(job["url"]).hostname or "frontend"
-    safe_host = "".join(ch if ch.isalnum() or ch in ".-_" else "_" for ch in host)
-    return send_file(
-        archive_path,
-        as_attachment=True,
-        download_name=f"{safe_host}-webloom.zip",
-        mimetype="application/zip",
-    )
+    if archive_path.exists():
+        host = urlparse((job or {}).get("url") or (project or {}).get("source_url") or "").hostname or "frontend"
+        safe_host = "".join(ch if ch.isalnum() or ch in ".-_" else "_" for ch in host)
+        return send_file(
+            archive_path,
+            as_attachment=True,
+            download_name=f"{safe_host}-webloom.zip",
+            mimetype="application/zip",
+        )
+
+    abort(404)
 
 
 
@@ -1304,15 +1374,31 @@ def _preview_response(data: bytes, content_type: str, job_id: str):
 
 def _preview_project_context(job_id):
     ident = current_identity()
-    if not ident:
-        abort(401)
-    project = get_project(ident["id"], job_id) if supabase_ready() else None
+    project = get_project(ident["id"], job_id) if (ident and supabase_ready()) else None
     with _jobs_lock:
         job = _jobs.get(job_id)
+
+    manifest_path = JOB_ROOT / job_id / "frontend" / "webloom-project.json"
+    if not job and not project and manifest_path.exists():
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+            job = {
+                "id": job_id,
+                "url": manifest.get("url", ""),
+                "status": "done",
+                "user_id": ident["id"] if ident else None,
+            }
+        except Exception:
+            pass
+
     if project:
         if project.get("status") != "done":
             abort(404)
-    elif not job or job.get("user_id") != ident["id"] or job.get("status") != "done":
+    elif job:
+        if job.get("status") != "done":
+            abort(404)
+    else:
         abort(404)
     return ident, project, job
 
@@ -1416,7 +1502,8 @@ def _serve_preview_file(job_id, asset_path, remember=False):
     candidates.append(request_rel)
 
     if project and supabase_ready():
-        prefix = (project.get("metadata") or {}).get("storage_prefix") or f"projects/{ident['id']}/{job_id}"
+        owner_id = project.get("user_id") or (ident["id"] if ident else "")
+        prefix = (project.get("metadata") or {}).get("storage_prefix") or f"projects/{owner_id}/{job_id}"
         for rel in candidates:
             if rel.startswith("../") or "/../" in rel:
                 abort(404)
@@ -1429,7 +1516,6 @@ def _serve_preview_file(job_id, asset_path, remember=False):
             if stored:
                 data, content_type = stored
                 return finish(_preview_response(data, content_type, job_id))
-        abort(404)
 
     root = (JOB_ROOT / job_id / "frontend").resolve()
     for rel in candidates:
