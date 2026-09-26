@@ -214,7 +214,7 @@ document.querySelectorAll('.reveal').forEach(el=>io?io.observe(el):el.classList.
 
       const hero=$(".hero-row");
       if(hero && !$(".project-actions",hero)){
-        hero.insertAdjacentHTML("beforeend",'<div class="project-actions"><a class="btn" target="_blank" rel="noopener" href="'+previewBase+'">Open preview ↗</a><a class="btn primary" href="/api/jobs/'+encodeURIComponent(id)+'/download">Download ZIP ↓</a></div>');
+        hero.insertAdjacentHTML("beforeend",'<div class="project-actions"><a class="btn primary" href="/api/jobs/'+encodeURIComponent(id)+'/download">Download ZIP ↓</a></div>');
       }
 
       const render=async tab=>{
@@ -222,7 +222,7 @@ document.querySelectorAll('.reveal').forEach(el=>io?io.observe(el):el.classList.
         panel.innerHTML='<div class="capture-running" style="min-height:360px"><div class="capture-spinner"></div><p>Loading '+esc(tab)+'…</p></div>';
         try{
           if(tab==="overview"){
-            panel.innerHTML='<iframe class="project-preview-frame" title="Captured website preview" src="'+previewBase+'" sandbox="allow-scripts allow-forms allow-popups" referrerpolicy="no-referrer"></iframe>';
+            panel.innerHTML='<div class="preview-toolbar"><span>Live reconstructed preview</span><button class="btn" type="button" data-reload-preview>Reload</button></div><iframe class="project-preview-frame" title="Captured website preview" src="'+previewBase+'" sandbox="allow-scripts allow-forms allow-popups allow-downloads" referrerpolicy="no-referrer"></iframe>'; const reload=$("[data-reload-preview]",panel); reload?.addEventListener("click",()=>{ const frame=$("iframe",panel); if(frame) frame.src=previewBase+"?r="+Date.now(); });
             return;
           }
           if(tab==="pages"){
@@ -248,6 +248,33 @@ document.querySelectorAll('.reveal').forEach(el=>io?io.observe(el):el.classList.
             const links=await loadJson("links.json");
             const rows=Array.isArray(links)?links:[];
             panel.innerHTML='<div class="project-data"><div class="project-data-head"><div><h2>Discovered links</h2><p>URLs referenced while WebLoom mapped the public frontend.</p></div><span class="project-count">'+rows.length+' links</span></div><div class="data-list">'+rows.slice(0,250).map(url=>'<div class="data-row"><a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+esc(url)+'</a><span>'+esc(hostOf(url))+'</span></div>').join("")+'</div></div>';
+            return;
+          }
+          if(tab==="data"){
+            const m=await loadJson("fusion.json");
+            const stats=m.stats||{};
+            const pages=Array.isArray(m.pages)?m.pages:[];
+            panel.innerHTML='<div class="project-data"><div class="project-data-head"><div><h2>Fusion data</h2><p>AI-ready crawl output produced alongside the reconstructed frontend.</p></div><span class="project-count">'+esc(m.engine||"Fusion")+'</span></div><div class="meta-grid"><div class="meta-card"><small>Pages fused</small><div>'+esc(stats.pages_fused||0)+'</div></div><div class="meta-card"><small>Total words</small><div>'+esc(Number(stats.total_words||0).toLocaleString())+'</div></div><div class="meta-card"><small>Assets discovered</small><div>'+esc(stats.total_assets_discovered||0)+'</div></div><div class="meta-card"><small>Graph edges</small><div>'+esc(stats.total_graph_edges||0)+'</div></div></div><div class="data-list">'+pages.slice(0,120).map(p=>'<div class="data-row"><div><b>'+esc(p.title||hostOf(p.url))+'</b><div class="metric-sub">'+esc(p.url)+'</div></div><span>'+esc(p.word_count||0)+' words</span></div>').join("")+'</div></div>';
+            return;
+          }
+          if(tab==="markdown"){
+            const md=await loadText("knowledge_base.md");
+            panel.innerHTML='<div class="project-data"><div class="project-data-head"><div><h2>Knowledge base</h2><p>Consolidated clean Markdown for AI/RAG workflows.</p></div><a class="btn" href="'+previewBase+'knowledge_base.md" download>Download .md</a></div><pre class="code-panel markdown-panel">'+esc(md)+'</pre></div>';
+            return;
+          }
+          if(tab==="graph"){
+            const graph=await loadJson("graph.json");
+            const nodes=Array.isArray(graph.nodes)?graph.nodes:[];
+            const edges=Array.isArray(graph.edges)?graph.edges:[];
+            panel.innerHTML='<div class="project-data"><div class="project-data-head"><div><h2>Link graph</h2><p>'+nodes.length+' nodes · '+edges.length+' internal edges.</p></div><a class="btn" href="'+previewBase+'graph.json" download>Download JSON</a></div><div class="data-list">'+edges.slice(0,180).map(e=>'<div class="data-row"><span class="graph-edge">'+esc(hostOf(e.source))+' → '+esc(hostOf(e.target))+'</span><span>'+esc(new URL(e.target).pathname||"/")+'</span></div>').join("")+'</div></div>';
+            return;
+          }
+          if(tab==="audit"){
+            const a=await loadJson("audit.json");
+            const sec=a.security||{};
+            const topology=a.topology||{};
+            const endpoints=Array.isArray(a.endpoints)?a.endpoints:[];
+            panel.innerHTML='<div class="project-data"><div class="project-data-head"><div><h2>Passive technical audit</h2><p>Headers, frontend topology and public client-side route discovery.</p></div><span class="project-count">Grade '+esc(sec.grade||"—")+'</span></div><div class="meta-grid"><div class="meta-card"><small>Header score</small><div>'+esc(sec.score??"—")+'/100</div></div><div class="meta-card"><small>Framework</small><div>'+esc(topology.primary_framework||"Unknown")+'</div></div><div class="meta-card"><small>JS bundles</small><div>'+esc(topology.total_bundles||0)+'</div></div><div class="meta-card"><small>Potential client leaks</small><div>'+esc(sec.leaks_found||0)+' flagged (values redacted)</div></div></div><div class="project-data-head"><div><h2 style="font-size:15px">Public client routes</h2><p>Paths referenced by public HTML/JS. No authenticated probing.</p></div></div><div class="data-list">'+endpoints.slice(0,80).map(ep=>'<div class="data-row"><b>'+esc(ep)+'</b><span>route</span></div>').join("")+'</div></div>';
             return;
           }
           if(tab==="sitemap"){
