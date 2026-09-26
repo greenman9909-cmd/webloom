@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#ffffff"><meta name="robots" content="noindex,nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/__spa_ui/static/webloom-app.css"><title>Owner claim · WebLoom</title></head>
+<body><div class="auth-page"><div class="auth-brand"><a class="brand" href="/"><span class="brand-mark"></span><span>WebLoom</span></a></div>
+<section class="auth-visual"><div class="auth-quote"><span class="badge" style="background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.16)">Private setup</span><h2>Claim owner access once.</h2><p>This promotes the signed-in account to permanent owner access. The claim code is not stored in the browser and cannot be used again by another account after ownership is claimed.</p></div></section>
+<section class="auth-form-wrap"><form class="auth-form" id="ownerClaimForm"><h1>Owner access</h1><p>Enter the one-time claim code.</p>
+<div class="field"><label>Claim code</label><input id="ownerClaimCode" autocomplete="off" placeholder="WL-••••••••••••••••" required></div>
+<button class="btn primary full" type="submit">Claim owner access →</button><p class="auth-error" id="ownerClaimError" role="alert"></p>
+<div class="auth-switch"><a href="/dashboard">Back to dashboard</a></div></form></section></div>
+<script>
+const form=document.getElementById("ownerClaimForm"),out=document.getElementById("ownerClaimError");
+form.addEventListener("submit",async e=>{e.preventDefault();const btn=form.querySelector("button");const old=btn.textContent;btn.disabled=true;btn.textContent="Claiming…";out.textContent="";try{const r=await fetch("/api/owner/claim",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:document.getElementById("ownerClaimCode").value.trim()})});const d=await r.json();if(!r.ok)throw new Error(d.error||"Owner claim failed.");location.href=d.redirect||"/admin"}catch(err){out.textContent=err.message;btn.disabled=false;btn.textContent=old}});
+</script></body></html>
