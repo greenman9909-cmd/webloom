@@ -761,7 +761,7 @@ def api_project(project_id):
                 "archive_path": f"/api/jobs/{project_id}/download",
                 "metadata": (job or {}).get("metadata") or {
                     "fusion": {
-                        "configured": bool(WEBLOOM_FUSION_URL),
+                        "configured": fusion_ready(),
                         "status": "done" if (JOB_ROOT / project_id / "frontend" / "fusion.json").exists() else "none",
                     }
                 },
