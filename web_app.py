@@ -12,13 +12,14 @@ import socket
 import threading
 import time
 import uuid
+from queue import Queue, Empty
 from pathlib import Path
 from urllib.parse import urlparse, urljoin
 from html.parser import HTMLParser
 from xml.sax.saxutils import escape as xml_escape
 
 import requests
-from flask import Flask, abort, jsonify, render_template, request, send_file, send_from_directory, session, redirect, make_response
+from flask import Flask, Response, abort, jsonify, render_template, request, send_file, send_from_directory, session, redirect, make_response, stream_with_context
 
 from spa_ripper.path_utils import query_variant_relpath
 from spa_ripper.scraper import DEFAULT_USER_AGENT, SpaScraper
@@ -306,6 +307,20 @@ class JobLog(io.TextIOBase):
         pass
 
 
+def _emit_job_event(job_id: str, event: str, **payload):
+    callback = None
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job:
+            job["phase"] = payload.get("phase", job.get("phase"))
+            callback = job.get("event_callback")
+    if callback:
+        try:
+            callback({"event": event, **payload})
+        except Exception:
+            pass
+
+
 def normalize_target(raw_url: str) -> str:
     value = (raw_url or "").strip()
     if not value:
@@ -328,6 +343,7 @@ def job_public(job):
         "failed": job.get("failed", 0),
         "error": job.get("error"),
         "log": job.get("log", ""),
+        "phase": job.get("phase"),
         "preview_url": f"/preview/{job['id']}/" if job["status"] == "done" else None,
         "download_url": f"/api/jobs/{job['id']}/download" if job["status"] == "done" else None,
     }
@@ -337,12 +353,29 @@ def run_job(job_id):
     with _jobs_lock:
         job = _jobs[job_id]
         job["status"] = "running"
+        job["phase"] = "connecting"
+    _emit_job_event(job_id, "phase", phase="connecting", label="Connecting to target")
 
     output_dir = JOB_ROOT / job_id / "frontend"
     output_dir.mkdir(parents=True, exist_ok=True)
     writer = JobLog(job_id)
 
     try:
+        def on_scraper_progress(progress):
+            with _jobs_lock:
+                current = _jobs.get(job_id)
+                if current:
+                    current["files"] = progress.get("processed_count", current.get("files", 0))
+                    current["bytes"] = progress.get("total_bytes", current.get("bytes", 0))
+                    current["failed"] = progress.get("failed_count", current.get("failed", 0))
+                    current["phase"] = "capturing"
+            _emit_job_event(
+                job_id,
+                "scrape",
+                phase="capturing",
+                **progress,
+            )
+
         scraper = SpaScraper(
             base_url=job["url"],
             output_dir=str(output_dir),
@@ -350,6 +383,7 @@ def run_job(job_id):
             deep_assets=bool(job.get("deep_assets")),
             max_files=job.get("max_files"),
             max_bytes=job.get("max_bytes"),
+            progress_callback=on_scraper_progress,
         )
         safe_session = GuardedSession()
         safe_session.headers.update({"User-Agent": DEFAULT_USER_AGENT})
@@ -361,10 +395,12 @@ def run_job(job_id):
         if not (output_dir / "index.html").exists():
             raise RuntimeError("Capture finished without creating index.html.")
 
+        _emit_job_event(job_id, "phase", phase="indexing", label="Building project index")
         _write_project_reports(output_dir, job, scraper)
 
         fusion_state = {"configured": fusion_ready(), "status": "not_configured"}
         if fusion_ready():
+            _emit_job_event(job_id, "phase", phase="fusion", label="Running Fusion analysis")
             try:
                 fusion_payload = fusion_request(
                     "/v1/fusion",
@@ -406,11 +442,13 @@ def run_job(job_id):
                     "error": str(exc)[:240],
                 }
 
+        _emit_job_event(job_id, "phase", phase="packaging", label="Packaging project")
         archive_base = JOB_ROOT / job_id / "webloom-project"
         archive_path = archive_base.with_suffix(".zip")
         shutil.make_archive(str(archive_base), "zip", root_dir=str(output_dir))
 
         if supabase_ready():
+            _emit_job_event(job_id, "phase", phase="uploading", label="Publishing preview files")
             try:
                 owner_id = job.get("user_id")
                 storage_prefix = f"projects/{owner_id}/{job_id}"
@@ -436,6 +474,14 @@ def run_job(job_id):
             job["bytes"] = scraper.total_bytes
             job["failed"] = len(scraper.failed_urls)
             job["finished_at"] = time.time()
+            job["phase"] = "done"
+
+        _emit_job_event(
+            job_id,
+            "complete",
+            phase="done",
+            job=job_public(job),
+        )
 
         if supabase_ready():
             update_project(
@@ -464,6 +510,8 @@ def run_job(job_id):
             job["status"] = "error"
             job["error"] = str(exc)
             job["finished_at"] = time.time()
+            job["phase"] = "error"
+        _emit_job_event(job_id, "error", phase="error", error=str(exc))
         if supabase_ready():
             update_project(
                 job_id,
