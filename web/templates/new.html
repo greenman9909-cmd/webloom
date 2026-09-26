@@ -1,0 +1,105 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#ffffff"><meta name="robots" content="noindex,nofollow"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/__spa_ui/static/webloom-app.css"><title>New capture · WebLoom</title></head><body><div class="shell"><aside class="sidebar"><a class="brand" href="/"><span class="brand-mark"></span><span>WebLoom</span></a><div class="nav-label">Workspace</div><nav class="side-nav">
+<a class="" href="/dashboard"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg>Overview</a>
+<a class="active" href="/new"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New capture</a>
+<a class="" href="/project"><svg viewBox="0 0 24 24"><path d="M4 6h6l2 2h8v10H4z"/></svg>Projects</a></nav>
+<div class="nav-label">Account</div><nav class="side-nav">
+<a class="" href="/billing"><svg viewBox="0 0 24 24"><path d="M4 7h16v10H4zM4 10h16"/></svg>Billing</a>
+<a class="" href="/settings"><svg viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 12h2m12 0h2M12 4v2m0 12v2"/></svg>Settings</a>
+<a class="" href="/account"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0"/></svg>Account</a></nav>
+<div class="side-foot"><div class="plan-chip"><b>Free plan</b><p>One complete capture included.</p><a class="btn primary full" href="/billing">Upgrade to Pro</a></div></div></aside><main class="main"><header class="topbar"><div class="topbar-left"><button class="btn mobile-menu" data-menu aria-label="Open navigation"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><span class="page-title">New capture</span></div><div class="top-actions"><a class="btn hide-mobile" href="/">View site</a><a class="avatar" href="/account">WL</a></div></header><div class="content">
+<div class="hero-row reveal"><div><h1>Capture a public website</h1><p>One URL in. A mapped, explorable project out.</p></div></div>
+<section class="capture-box reveal"><span class="badge">Capture · Preview · Export</span><h2 style="margin-top:14px">Start with the site you want to understand.</h2><p>Paste a publicly accessible URL. WebLoom will organize discoverable pages, assets, links and metadata into one workspace.</p>
+<div class="urlbar"><label class="url-input"><svg viewBox="0 0 24 24"><path d="M10.5 13.5a4 4 0 0 0 5.7 0l2.3-2.3a4 4 0 0 0-5.7-5.7l-1.3 1.3M13.5 10.5a4 4 0 0 0-5.7 0l-2.3 2.3a4 4 0 0 0 5.7 5.7l1.3-1.3"/></svg><input id="captureUrl" placeholder="example.com" aria-label="Public website URL"></label><button id="startCapture" class="btn primary" type="button">Start capture →</button></div>
+<div class="helper-row"><span><i class="helper-dot">✓</i>Public pages only</span><span><i class="helper-dot">✓</i>Live preview</span><span><i class="helper-dot">✓</i>ZIP export</span></div>
+<div class="capture-error" id="captureError" hidden role="alert"></div>
+<div class="capture-progress" id="captureProgress" hidden>
+  <div class="capture-progress-bar"><i id="captureProgressBar"></i></div>
+  <div class="capture-progress-copy"><b id="captureProgressTitle">Connecting to the site…</b><span id="captureProgressMeta">Checking the public entry page.</span></div>
+</div></section>
+<section class="card visual-grid reveal motion-surface" data-scrub style="margin-top:18px">
+<div class="visual-copy"><span class="badge">What happens next</span><h2 style="margin-top:12px">The capture builds itself in front of you.</h2><p>WebLoom maps reachable pages, pulls referenced frontend files into one workspace, then gives you a live preview before export.</p><div class="mini-points"><div class="mini-point"><span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="18" cy="17" r="2"/><path d="M8 11 16 8M8 13l8 3"/></svg></span><span>Map internal links and reachable routes.</span></div><div class="mini-point"><span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><path d="M3.5 8h17M8 13s1.7-2 4-2 4 2 4 2-1.7 2-4 2-4-2-4-2Z"/><circle cx="12" cy="13" r="1"/></svg></span><span>Open the rebuilt frontend in a live preview.</span></div><div class="mini-point"><span class="mini-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 7h14v12H5zM8 4h8v3"/><path d="M12 10v5M9.5 12.5 12 15l2.5-2.5"/></svg></span><span>Export the organized project when it looks right.</span></div></div></div>
+<div class="stage-card" data-depth="1.15"><div class="stage-toolbar"><span class="stage-dots"><i></i><i></i><i></i></span><span class="stage-url">public-site.example</span><span class="stage-status">Mapping</span></div><div class="stage-body"><div class="stage-browser"><div class="stage-browser-bar"></div><div class="stage-browser-page"></div></div><div class="stage-file-panel"><div class="stage-file"><i></i>pages /</div><div class="stage-file"><i></i>assets /</div><div class="stage-file"><i></i>metadata.json</div><div class="stage-file"><i></i>sitemap.xml</div></div><div class="stage-scan"></div><span class="stage-node a"></span><span class="stage-node b"></span><span class="stage-node c"></span><span class="stage-line a"></span><span class="stage-line b"></span><span class="stage-float one">Routes found</span><span class="stage-float two">Preview building</span></div></div>
+</section></div></main></div><script src="/__spa_ui/static/webloom-app.js"></script><script>
+  const params = new URLSearchParams(location.search);
+  const field = document.getElementById("captureUrl");
+  if (field && params.get("url")) field.value = params.get("url");
+  document.getElementById("startCapture")?.addEventListener("click", async () => {
+    const value = field?.value.trim();
+    if (!value) { field?.focus(); return; }
+    const button = document.getElementById("startCapture");
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = "Capturing…";
+    const progress = document.getElementById("captureProgress");
+    const progressBar = document.getElementById("captureProgressBar");
+    const progressTitle = document.getElementById("captureProgressTitle");
+    const progressMeta = document.getElementById("captureProgressMeta");
+    const stages = [
+      ["Connecting to the site…","Checking the public entry page."],
+      ["Mapping the frontend…","Following reachable routes and references."],
+      ["Collecting files…","Saving pages, assets, links and metadata."],
+      ["Packaging the project…","Preparing preview and export files."]
+    ];
+    let stage = 0;
+    let timer = null;
+    if (progress) {
+      progress.hidden = false;
+      progressBar.style.width = "12%";
+      timer = setInterval(() => {
+        stage = Math.min(stages.length - 1, stage + 1);
+        progressTitle.textContent = stages[stage][0];
+        progressMeta.textContent = stages[stage][1];
+        progressBar.style.width = [12,38,68,88][stage] + "%";
+      }, 4200);
+    }
+    try {
+      const errorBox = document.getElementById("captureError");
+      if (errorBox) { errorBox.hidden = true; errorBox.textContent = ""; }
+      const response = await fetch("/api/clone", {
+        method: "POST",
+        headers: {"Content-Type":"application/json","Accept":"application/json"},
+        credentials: "same-origin",
+        body: JSON.stringify({url:value})
+      });
+      const raw = await response.text();
+      let data = {};
+      if (raw) {
+        try { data = JSON.parse(raw); }
+        catch {
+          throw new Error(response.ok
+            ? "The capture service returned an invalid response."
+            : "This deployment is not connected to the WebLoom capture backend.");
+        }
+      }
+      if (!response.ok || !data?.job?.id) {
+        const err = new Error(data?.error || data?.job?.error || "Capture could not be started.");
+        err.upgradeRequired = !!data?.upgrade_required;
+        throw err;
+      }
+      if (progressBar) progressBar.style.width = "100%";
+      if (progressTitle) progressTitle.textContent = data.job.status === "done" ? "Project ready." : "Capture started.";
+      if (progressMeta) progressMeta.textContent = "Opening your workspace…";
+      clearInterval(timer);
+      setTimeout(() => { location.href = "/project/" + data.job.id; }, 260);
+    } catch (error) {
+      clearInterval(timer);
+      button.disabled = false;
+      button.textContent = original;
+      if (progress) progress.hidden = true;
+      const errorBox = document.getElementById("captureError");
+      if (errorBox) {
+        errorBox.hidden = false;
+        errorBox.innerHTML = "";
+        const message = document.createElement("span");
+        message.textContent = error.message || "Capture could not be started.";
+        errorBox.appendChild(message);
+        if (error.upgradeRequired) {
+          const link = document.createElement("a");
+          link.href = "/billing";
+          link.textContent = "View Pro →";
+          errorBox.appendChild(link);
+        }
+      }
+    }
+  });
+  </script></body></html>
