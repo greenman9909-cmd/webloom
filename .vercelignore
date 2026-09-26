@@ -1,0 +1,6 @@
+tests/**
+android/**
+test-output/**
+SPA-Ripper.apk
+*.apk
+.pytest_cache/**
